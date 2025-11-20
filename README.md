@@ -1,68 +1,71 @@
-# Robot Vacuum Depot Analytics
+# 🤖 Robot Vacuum Depot Analytics
 
-A Data Visualization Agentic Application that enables natural language query processing and automated chart generation.
+**Robot Vacuum Depot Analytics** is an advanced **Agentic BI Tool** that transforms natural language into actionable insights. Built with **LangGraph** and **Streamlit**, it empowers users to query their supply chain data without writing a single line of SQL.
 
-## Setup Instructions
+---
 
-### 1. Prerequisites
-- Python
+## ✨ Key Features
+
+- **🗣️ Natural Language Interface**: Ask "Why are deliveries delayed in Chicago?" and get an answer.
+- **📊 Auto-Visualization**: Automatically selects the best chart (Bar, Line, Scatter, Pie) for your data.
+- **⚡ Smart Caching**: Caches generated SQL to deliver sub-second responses for recurring queries.
+- **📈 Performance Analytics**: Built-in dashboard to monitor query latency and system health.
+- **🔄 History & Replay**: Access and re-run your entire query history.
+
+## 🚀 Quick Start
+
+### Prerequisites
+- Python 3.9+
 - PostgreSQL
 - OpenAI API Key
 
-### 2. Install Dependencies
-```bash
-cd src
-pip install -r requirements.txt
-# incase that does work, this worked for me
-pip3 install -r requirements.txt
-```
+### Installation
 
-### 3. Configure Environment
-```bash
-# Copy example env file
-cp .env.example .env
+1.  **Clone & Setup**
+    ```bash
+    cd src
+    pip install -r requirements.txt
+    ```
 
-# Edit .env and add your OpenAI API key
-OPENAI_API_KEY=your-api-key-here
-```
+2.  **Configure Environment**
+    ```bash
+    cp .env.example .env
+    # Edit .env with your OPENAI_API_KEY and DB credentials
+    ```
 
-### 4. Setup Database
+3.  **Initialize Database** (using Go)
+    ```bash
+    cd src/go
+    go mod init robotvacuum
+    go get github.com/lib/pq
+    go run create_schema.go
+    go run ingest_masterdata.go
+    ```
 
-#### Option A: Using Go (recommended)
-```bash
-# Ensure PostgreSQL is running
-# Navigate to the Go source directory
-cd src/go
+4.  **Run the App**
+    ```bash
+    cd src
+    streamlit run app.py
+    ```
 
-# Initialize Go module and install PostgreSQL driver
-go mod init robotvacuum
-go get github.com/lib/pq
+## 📂 Project Structure
 
-# Test Connection
-go run main.go
+| Directory | Description |
+|-----------|-------------|
+| `src/app.py` | Main Streamlit application entry point. |
+| `src/agentic_processor/` | Orchestrates the query flow and caching logic. |
+| `src/my_agent/` | Core LangGraph agent definitions (SQL generation, execution). |
+| `src/visualization/` | Plotly-based chart rendering engine. |
+| `src/go/` | High-performance database initialization scripts. |
 
-# Create/recreate the database schema (drops existing data)
-go run create_schema.go
+## 💡 Example Queries
 
-# Load the master data from CSV
-go run ingest_masterdata.go
-```
+Try these in the chat interface:
+- *"Show me the top 5 selling products by revenue"*
+- *"What is the average delivery time for each carrier?"*
+- *"Plot the daily sales trend for the last 30 days"*
+- *"Which warehouse has the most stock?"*
 
-### 5. Run Application
-```bash
-python3 -m streamlit run app.py
-```
+## 📚 Documentation
 
-## Features
-- Natural language query processing
-- Automatic SQL generation using GPT-4o-mini
-- Smart chart type detection
-- Support for: Line, Bar, Pie, Scatter, and Table views
-- Interactive Plotly visualizations
-- CSV export capability
-
-## Example Queries
-- "Plot a line chart of total monthly revenue"
-- "What is the percentage distribution of delivery statuses?"
-- "Which manufacturer has the best average review rating?"
-- "Compare average shipping cost by carrier"
+For a deep dive into the architecture and data flow, check out [PROJECT_DETAILS.md](../PROJECT_DETAILS.md).

@@ -22,6 +22,8 @@ class QueryMetrics:
     chart_type: str = "none"
     success: bool = False
     error: str = ""
+    result_data: List[Dict[str, Any]] = field(default_factory=list)
+    from_cache: bool = False
 
 class MetricsTracker:
     """Thread-safe metrics tracker for analytics"""
@@ -73,7 +75,7 @@ class MetricsTracker:
         if step_name in step_map:
             setattr(metrics, step_map[step_name], duration)
 
-    def complete_query(self, session_id: str, success: bool, **kwargs) -> QueryMetrics:
+    def complete_query(self, session_id: str, success: bool, data: List[Dict[str, Any]] = None, **kwargs) -> QueryMetrics:
         """Complete query tracking and return metrics"""
         if session_id not in self._current_metrics:
             return None
@@ -81,11 +83,18 @@ class MetricsTracker:
         metrics = self._current_metrics[session_id]
         metrics.success = success
         metrics.total_time = (datetime.now() - metrics.timestamp).total_seconds()
+        
+        if data:
+            metrics.result_data = data
 
         # Update with additional info
         for key, value in kwargs.items():
             if hasattr(metrics, key):
                 setattr(metrics, key, value)
+
+        # Set from_cache flag
+        if 'from_cache' in kwargs:
+            metrics.from_cache = kwargs['from_cache']
 
         # Store in history
         self.queries.append(metrics)
@@ -142,6 +151,16 @@ class MetricsTracker:
         for q in self.queries:
             chart_dist[q.chart_type] = chart_dist.get(q.chart_type, 0) + 1
 
+        # Cached vs non-cached stats
+        cached_queries = [q for q in self.queries if q.from_cache]
+        non_cached_queries = [q for q in self.queries if not q.from_cache]
+
+        cached_count = len(cached_queries)
+        non_cached_count = len(non_cached_queries)
+
+        avg_cached_time = round(sum(q.total_time for q in cached_queries) / cached_count, 2) if cached_count > 0 else 0
+        avg_non_cached_time = round(sum(q.total_time for q in non_cached_queries) / non_cached_count, 2) if non_cached_count > 0 else 0
+
         # Recent queries (last 10)
         recent = [
             {
@@ -164,7 +183,11 @@ class MetricsTracker:
             'chart_distribution': chart_dist,
             'recent_queries': recent,
             'slow_queries': self.slow_queries[-10:],  # Last 10 slow queries
-            'cache_size': len(self.query_cache)
+            'cache_size': len(self.query_cache),
+            'cached_queries': cached_count,
+            'non_cached_queries': non_cached_count,
+            'avg_cached_time': avg_cached_time,
+            'avg_non_cached_time': avg_non_cached_time
         }
 
     def get_cached_result(self, query: str) -> Any:
@@ -219,7 +242,8 @@ class MetricsTracker:
                 'sql_query': q.sql_generated,
                 'chart_type': q.chart_type,
                 'success': q.success,
-                'results_count': q.results_count
+                'results_count': q.results_count,
+                'result_data': q.result_data
             }
             for q in self.queries
         ]
@@ -254,7 +278,8 @@ class MetricsTracker:
                     sql_generated=q.get('sql_query', ''),
                     chart_type=q.get('chart_type', 'none'),
                     success=q.get('success', True),
-                    results_count=q.get('results_count', 0)
+                    results_count=q.get('results_count', 0),
+                    result_data=q.get('result_data', [])
                 )
                 self.queries.append(metrics)
 

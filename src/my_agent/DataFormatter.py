@@ -62,6 +62,12 @@ class DataFormatter:
                 return self._format_line_data(results, question)
             except Exception as e:
                 return self._format_other_visualizations(visualization, question, sql_query, results)
+
+        if visualization == "pie":
+            try:
+                return self._format_pie_data(results, question)
+            except Exception as e:
+                return self._format_other_visualizations(visualization, question, sql_query, results)
         
         return self._format_other_visualizations(visualization, question, sql_query, results)
     
@@ -136,12 +142,8 @@ class DataFormatter:
                 "yAxisLabel": ""
             }
 
-            # Use LLM to get a relevant label for the y-axis
-            prompt = ChatPromptTemplate.from_messages([
-                ("system", "You are a data labeling expert. Given a question and some data, provide a concise and relevant label for the y-axis."),
-                ("human", "Question: {question}\n Data (first few rows): {data}\n\nProvide a concise label for the y-axis. For example, if the data represents sales figures over time for different categories, the label could be 'Sales'. If it's about population growth for different groups, it could be 'Population'."),
-            ])
-            y_axis_label = self.llm_manager.invoke(prompt, question=question, data=str(results[:2]))
+            # Use heuristic to get a relevant label for the y-axis (skip LLM call)
+            y_axis_label = self._extract_label_from_question(question)
 
             # Add the y-axis label to the formatted data
             formatted_data["yAxisLabel"] = y_axis_label.strip()
@@ -215,6 +217,33 @@ class DataFormatter:
             "values": values
         }
 
+        return {"formatted_data_for_visualization": formatted_data}
+
+    def _format_pie_data(self, results, question):
+        if isinstance(results, str):
+            results = eval(results)
+
+        if len(results[0]) == 2:
+            labels = [str(row[0]) for row in results]
+            values = [float(row[1]) for row in results]
+        else:
+            # Fallback for other shapes, though pie usually needs 2 cols
+            labels = [str(row[0]) for row in results]
+            values = [float(row[1]) for row in results]
+
+        formatted_data = {
+            "labels": labels,
+            "datasets": [{
+                "data": values,
+                "backgroundColor": [
+                    "#FF6384", "#36A2EB", "#FFCE56", "#4BC0C0", "#9966FF", "#FF9F40"
+                ],
+                "hoverBackgroundColor": [
+                    "#FF6384", "#36A2EB", "#FFCE56", "#4BC0C0", "#9966FF", "#FF9F40"
+                ]
+            }]
+        }
+        
         return {"formatted_data_for_visualization": formatted_data}
 
     def _format_other_visualizations(self, visualization, question, sql_query, results):

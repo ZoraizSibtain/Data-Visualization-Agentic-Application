@@ -14,22 +14,22 @@ st.set_page_config(
     layout="wide",
 )
 
-# Hide Streamlit navbar and footer
-st.markdown("""
-    <style>
-        .reportview-container {
-            margin-top: -2em;
-        }
-        #MainMenu {visibility: hidden;}
-        .stDeployButton {display:none;}
-        footer {visibility: hidden;}
-        #stDecoration {display:none;}
-    </style>
-""", unsafe_allow_html=True)
+# Hide Streamlit navbar and footer, make header sticky
+from assets.styles import CUSTOM_CSS
+
+# Hide Streamlit navbar and footer, make header sticky
+st.markdown(CUSTOM_CSS, unsafe_allow_html=True)
 
 # Initialize session state
 if 'query_history' not in st.session_state:
-    st.session_state.query_history = []
+    # Load history from metrics tracker
+    from my_agent.metrics import metrics_tracker
+    st.session_state.query_history = [
+        {'query': q.query_text, 'chart_type': q.chart_type} 
+        for q in metrics_tracker.queries
+    ]
+    if not st.session_state.query_history:
+        st.session_state.query_history = []
 if 'messages' not in st.session_state:
     st.session_state.messages = []
 if 'ui_mode' not in st.session_state:
@@ -45,15 +45,15 @@ if 'sidebar_query' not in st.session_state:
 TABLE_SUGGESTIONS = {
     "Delayed deliveries by model": "Which robot vacuum models have the highest number of delayed deliveries across all Chicago ZIP codes?",
     "Warehouses below threshold": "Which warehouses are currently below their restock threshold based on stock level and capacity?",
+    "Zip code with most delays": "Which Zip code has the highest number of delayed deliveries?",
     "Best rated manufacturer": "Among all manufacturers, who has the best average review rating for their products?",
-    "Top 5 best-selling products": "What are the top 5 best-selling products?",
 }
 
 GRAPH_SUGGESTIONS = {
-    "Monthly revenue trends": "Plot a line chart of total monthly revenue to visualize sales trends over time.",
-    "Delivery status distribution": "What is the percentage distribution of delivery statuses across all orders?",
+    "Monthly revenue trend": "Plot a line chart of total monthly revenue to visualize sales trends over time.",
+    "Delivery status distribution": "What is the percentage distribution of delivery statuses (Delivered, Delayed, Canceled, Fraud, etc.) across all orders?",
     "Ratings by manufacturer": "Plot the average review rating per manufacturer to analyze product satisfaction by brand.",
-    "Shipping cost by carrier": "Compare average shipping cost by carrier to evaluate cost efficiency.",
+    "Shipping cost by Carrier": "Compare average shipping cost by carrier to evaluate cost efficiency.",
 }
 
 # Combined for backwards compatibility
@@ -83,24 +83,31 @@ with title_row[1]:
 # Shared sidebar for all modes (except analytics)
 if st.session_state.ui_mode in ['chat', 'dashboard']:
     with st.sidebar:
-        st.markdown("### Table Queries")
-        for name, query in TABLE_SUGGESTIONS.items():
-            if st.button(name, key=f"sidebar_table_{name}", use_container_width=True):
-                st.session_state.sidebar_query = query
-                st.rerun()
+        st.markdown("### 🟢 System Status")
+        st.caption("Database: **Connected**")
+        st.caption("Agent: **Active**")
+        st.markdown("---")
 
-        st.markdown("### Graph Queries")
-        for name, query in GRAPH_SUGGESTIONS.items():
-            if st.button(name, key=f"sidebar_graph_{name}", use_container_width=True):
-                st.session_state.sidebar_query = query
-                st.rerun()
+        st.markdown("### 📝 Sample Queries")
+        
+        with st.expander("📊 Tables", expanded=True):
+            for name, query in TABLE_SUGGESTIONS.items():
+                if st.button(name, key=f"sidebar_table_{name}", use_container_width=True):
+                    st.session_state.sidebar_query = query
+                    st.rerun()
+
+        with st.expander("📈 Charts", expanded=True):
+            for name, query in GRAPH_SUGGESTIONS.items():
+                if st.button(name, key=f"sidebar_graph_{name}", use_container_width=True):
+                    st.session_state.sidebar_query = query
+                    st.rerun()
 
         st.markdown("---")
-        st.markdown("### Query History")
+        st.markdown("### 🕒 Recent History")
         if st.session_state.query_history:
-            for i, item in enumerate(reversed(st.session_state.query_history[-10:])):
-                query_preview = item['query'][:40] + '...' if len(item['query']) > 40 else item['query']
-                if st.button(query_preview, key=f"history_{i}", use_container_width=True):
+            for i, item in enumerate(reversed(st.session_state.query_history[-5:])):
+                query_preview = item['query'][:35] + '...' if len(item['query']) > 35 else item['query']
+                if st.button(f"↺ {query_preview}", key=f"history_{i}", use_container_width=True, help=item['query']):
                     st.session_state.sidebar_query = item['query']
                     st.rerun()
         else:
@@ -111,6 +118,18 @@ if st.session_state.ui_mode == 'analytics':
     import json
     import os
     from my_agent.metrics import metrics_tracker
+
+    # Add Save/Clear buttons to title row
+    with title_row[2]:
+        ac1, ac2 = st.columns(2)
+        with ac1:
+            if st.button("💾", help="Save Analytics", use_container_width=True):
+                metrics_tracker.save_to_file()
+                st.toast("Analytics saved to test_results.json")
+        with ac2:
+            if st.button("🗑️", help="Clear Analytics", use_container_width=True):
+                metrics_tracker.clear()
+                st.rerun()
 
     analytics = metrics_tracker.get_analytics()
 
@@ -124,13 +143,27 @@ if st.session_state.ui_mode == 'analytics':
         except Exception:
             pass
 
-    # Show test results and session analytics side by side if both available
+    # Show session analytics and test results side by side
     if test_results or analytics['total_queries'] > 0:
         main_cols = st.columns(2) if test_results and analytics['total_queries'] > 0 else [st.container()]
 
-        # Test Suite Results
+        # Session Analytics (LEFT)
+        if analytics['total_queries'] > 0:
+            with main_cols[0]:
+                st.markdown("## Session Analytics")
+
+                col1, col2 = st.columns(2)
+                with col1:
+                    st.metric("Total Queries", analytics['total_queries'])
+                    st.metric("Avg Response Time", f"{analytics['avg_response_time']}s")
+                with col2:
+                    st.metric("Success Rate", f"{analytics['success_rate']}%")
+                    st.metric("Under 5s", f"{analytics['queries_under_5s']}%")
+
+        # Test Suite Results (RIGHT)
         if test_results:
-            with main_cols[0] if analytics['total_queries'] > 0 else main_cols[0]:
+            col_idx = 1 if analytics['total_queries'] > 0 else 0
+            with main_cols[col_idx] if analytics['total_queries'] > 0 else main_cols[0]:
                 st.markdown("## Test Suite Results")
                 summary = test_results['summary']
 
@@ -143,25 +176,6 @@ if st.session_state.ui_mode == 'analytics':
                     st.metric("Under 5s", f"{summary['under_5s_percent']}%")
 
                 st.caption(f"Last run: {test_results['timestamp'][:19]}")
-
-                with st.expander("View Test Details"):
-                    for q in test_results['queries']:
-                        status_icon = "✅" if q['status'] == 'PASSED' else "⚠️" if q['status'] == 'NO DATA' else "❌"
-                        st.text(f"{status_icon} {q['query'][:50]}... ({q['time']}s)")
-
-        # Session Analytics
-        if analytics['total_queries'] > 0:
-            col_idx = 1 if test_results else 0
-            with main_cols[col_idx] if test_results else main_cols[0]:
-                st.markdown("## Session Analytics")
-
-                col1, col2 = st.columns(2)
-                with col1:
-                    st.metric("Total Queries", analytics['total_queries'])
-                    st.metric("Avg Response Time", f"{analytics['avg_response_time']}s")
-                with col2:
-                    st.metric("Success Rate", f"{analytics['success_rate']}%")
-                    st.metric("Under 5s", f"{analytics['queries_under_5s']}%")
     else:
         st.info("No queries processed yet. Run some queries to see analytics.")
         st.stop()
@@ -169,68 +183,60 @@ if st.session_state.ui_mode == 'analytics':
     if analytics['total_queries'] > 0:
 
         st.markdown("---")
-        st.markdown("### Performance Breakdown")
 
-        col_a, col_b = st.columns(2)
-        with col_a:
-            st.markdown("**Timing (avg)**")
-            st.text(f"  SQL Generation: {analytics['avg_sql_gen_time']}s")
-            st.text(f"  Query Execution: {analytics['avg_execution_time']}s")
-            st.text(f"  Parsing: {analytics['avg_parse_time']}s")
+        # Performance Breakdown (LEFT) and Cache Stats (RIGHT)
+        perf_cols = st.columns(2)
 
-        with col_b:
+        with perf_cols[0]:
+            st.markdown("### Performance Breakdown")
+
+            st.markdown("**Timing (average)**")
+            timing_cols = st.columns(3)
+            with timing_cols[0]:
+                st.metric("SQL Gen", f"{analytics['avg_sql_gen_time']}s")
+            with timing_cols[1]:
+                st.metric("Execution", f"{analytics['avg_execution_time']}s")
+            with timing_cols[2]:
+                st.metric("Parsing", f"{analytics['avg_parse_time']}s")
+
             st.markdown("**Chart Distribution**")
-            for chart_type, count in analytics['chart_distribution'].items():
-                st.text(f"  {chart_type}: {count}")
+            chart_types = list(analytics['chart_distribution'].keys())
+            chart_counts = list(analytics['chart_distribution'].values())
+            if chart_types:
+                chart_cols = st.columns(len(chart_types))
+                for i, (chart_type, count) in enumerate(zip(chart_types, chart_counts)):
+                    with chart_cols[i]:
+                        st.metric(chart_type.title(), count)
 
-        if analytics['recent_queries']:
-            st.markdown("---")
-            st.markdown("### Recent Queries")
-            for i, q in enumerate(reversed(analytics['recent_queries'][-5:])):
-                status = "✅" if q['success'] else "❌"
-                st.text(f"{status} {q['query']} ({q['time']}s)")
+        with perf_cols[1]:
+            st.markdown("### Cache Performance")
+            st.markdown(f"**Cache Size: {analytics.get('cache_size', 0)} queries cached**")
 
-        # Show slow queries
+            cache_cols = st.columns(2)
+            with cache_cols[0]:
+                st.metric("Cached Queries", analytics.get('cached_queries', 0))
+                st.metric("Avg Cached Time", f"{analytics.get('avg_cached_time', 0)}s")
+            with cache_cols[1]:
+                st.metric("Non-cached Queries", analytics.get('non_cached_queries', 0))
+                st.metric("Avg Non-cached Time", f"{analytics.get('avg_non_cached_time', 0)}s")
+
+        st.markdown("---")
+
+        # Slow Queries (Full Width, 2 Columns)
+        st.markdown("### Slow Queries (>5s)")
+        
         if analytics.get('slow_queries'):
-            st.markdown("---")
-            st.markdown("### Slow Queries (>5s)")
-            for sq in reversed(analytics['slow_queries'][-5:]):
-                st.warning(f"**{sq['time']}s** - {sq['query'][:60]}...")
-                st.caption(f"SQL Gen: {sq['sql_gen_time']}s | Execution: {sq['execution_time']}s")
-
-        # Show cache info
-        st.markdown("---")
-        st.caption(f"Cache size: {analytics.get('cache_size', 0)} queries cached")
-
-        col1, col2 = st.columns(2)
-        with col1:
-            if st.button("Save Analytics"):
-                metrics_tracker.save_to_file()
-                st.success("Analytics saved to test_results.json")
-        with col2:
-            if st.button("Clear Analytics"):
-                metrics_tracker.clear()
-                st.rerun()
-
-        # Performance improvement suggestions
-        st.markdown("---")
-        st.markdown("### Performance Suggestions")
-
-        suggestions = []
-        if analytics['avg_sql_gen_time'] > 2.0:
-            suggestions.append("- **SQL Generation is slow** (>2s avg): Consider caching common query patterns or using a faster LLM model")
-        if analytics['avg_execution_time'] > 1.0:
-            suggestions.append("- **Query Execution is slow** (>1s avg): Add database indexes on frequently queried columns, or optimize JOIN operations")
-        if analytics['queries_under_5s'] < 80:
-            suggestions.append("- **Low percentage of fast queries** (<80% under 5s): Review slow queries in history for optimization opportunities")
-        if analytics['success_rate'] < 95:
-            suggestions.append("- **Success rate below 95%**: Check error patterns in recent queries to identify common failure modes")
-
-        if suggestions:
-            for s in suggestions:
-                st.markdown(s)
+            slow_queries = list(reversed(analytics['slow_queries'][-10:]))
+            sq_cols = st.columns(2)
+            
+            for i, sq in enumerate(slow_queries):
+                col_idx = i % 2
+                with sq_cols[col_idx]:
+                    with st.container(border=True):
+                        st.warning(f"**{sq['time']}s** - {sq['query']}")
+                        st.caption(f"SQL Gen: {sq['sql_gen_time']}s | Execution: {sq['execution_time']}s")
         else:
-            st.success("Performance looks good! All metrics within acceptable ranges.")
+            st.success("No slow queries! All queries under 5s.")
 
     st.stop()
 
@@ -238,82 +244,109 @@ if st.session_state.ui_mode == 'analytics':
 if st.session_state.ui_mode == 'history':
     from my_agent.metrics import metrics_tracker
 
+    # Add Refresh All button to title row
+    with title_row[2]:
+        refresh_all = st.button("Refresh All", type="primary", use_container_width=True)
+
     queries = metrics_tracker.queries
 
     if not queries:
         st.info("No query history available. Run some queries to see them here.")
         st.stop()
 
-    # Header row with refresh all button
-    col1, col2 = st.columns([6, 1])
-    with col1:
-        st.markdown(f"**{len(queries)} queries** in history")
-    with col2:
-        refresh_all = st.button("Refresh All", type="primary", use_container_width=True)
+    # Show query count
+    st.markdown(f"**{len(queries)} queries** in history")
 
     # Store selected query for rerun
     if 'rerun_query' not in st.session_state:
         st.session_state.rerun_query = None
 
-    # Display queries in reverse chronological order
+    # Display queries in grid layout
+    NUM_COLS = 3
+    cols = st.columns(NUM_COLS)
+
     for i, q in enumerate(reversed(queries)):
         idx = len(queries) - 1 - i
-
-        with st.expander(
-            f"**{q.query_text[:80]}{'...' if len(q.query_text) > 80 else ''}**",
-            expanded=(st.session_state.rerun_query == idx)
-        ):
-            cols = st.columns([3, 1, 1, 1])
-
-            with cols[0]:
-                st.text_area("Full Query", value=q.query_text, disabled=True, height=80, key=f"query_{idx}")
-
-            with cols[1]:
-                st.metric("Total Time", f"{q.total_time:.2f}s")
-                st.metric("Results", q.results_count)
-
-            with cols[2]:
-                st.metric("SQL Gen", f"{q.sql_gen_time:.2f}s")
-                st.metric("Execution", f"{q.execution_time:.2f}s")
-
-            with cols[3]:
-                timestamp = q.timestamp.strftime("%Y-%m-%d %H:%M")
-                st.caption(f"**Time:** {timestamp}")
-                st.caption(f"**Chart:** {q.chart_type}")
-                status = "✅ Success" if q.success else "❌ Failed"
-                st.caption(f"**Status:** {status}")
-
-            if q.sql_generated:
-                st.code(q.sql_generated, language='sql')
-
-            btn_cols = st.columns([1, 4])
-            with btn_cols[0]:
-                if st.button("🔄 Refresh", key=f"refresh_{idx}", use_container_width=True):
-                    st.session_state.rerun_query = idx
-                    st.rerun()
-
-            if st.session_state.rerun_query == idx:
-                with st.spinner("Re-running query..."):
-                    processor = QueryProcessor()
-                    result = processor.process_natural_language(q.query_text)
-                    st.session_state.rerun_query = None
-
-                if result['status'] == 'error':
-                    st.error(result.get('message', 'Error running query'))
-                elif result.get('data') is not None and not result['data'].empty:
-                    data = result['data']
-                    chart_type = result.get('chart_type', 'table')
-                    if chart_type != 'table':
-                        chart = ChartRenderer.render_chart(data, chart_type)
+        col_idx = i % NUM_COLS
+        
+        with cols[col_idx].container(border=True):
+            # Card Header: Query Text (Full Title)
+            st.markdown(f"**{q.query_text}**")
+            st.markdown("---")
+            
+            # Chart Area
+            if hasattr(q, 'result_data') and q.result_data:
+                try:
+                    df = pd.DataFrame(q.result_data)
+                    if not df.empty and q.chart_type != 'table':
+                        chart = ChartRenderer.render_chart(df, q.chart_type)
                         if chart:
-                            st.plotly_chart(chart, use_container_width=True, key=f"chart_{idx}")
+                            st.plotly_chart(chart, use_container_width=True, key=f"hist_chart_{idx}")
                         else:
-                            st.dataframe(data, use_container_width=True, hide_index=True)
+                            st.dataframe(df.head(5), use_container_width=True, hide_index=True)
                     else:
-                        st.dataframe(data, use_container_width=True, hide_index=True)
-                    st.success(f"Query refreshed with {len(data)} results")
+                        st.dataframe(df.head(5), use_container_width=True, hide_index=True)
+                except Exception as e:
+                    st.caption(f"Could not render chart: {str(e)}")
+            else:
+                st.info("No data available for preview", icon="ℹ️")
+
+            # Metrics Row
+            m_col1, m_col2 = st.columns(2)
+            with m_col1:
+                st.caption(f"⏱️ {q.total_time:.2f}s")
+            with m_col2:
+                st.caption(f"📊 {q.chart_type}")
+            
+            # Status & Timestamp
+            status_icon = "✅" if q.success else "❌"
+            timestamp = q.timestamp.strftime("%H:%M %d/%m")
+            st.caption(f"{status_icon} {timestamp}")
+            
+            # Actions
+            if st.button("🔄 Rerun", key=f"rerun_{idx}", use_container_width=True):
+                st.session_state.rerun_query = idx
+                st.rerun()
+
+            # View Details Expander
+            with st.expander("Details"):
+                st.text_area("SQL", value=q.sql_generated, height=150, disabled=True, key=f"sql_{idx}")
+                detail_cols = st.columns(2)
+                with detail_cols[0]:
+                    st.metric("Rows", q.results_count)
+                with detail_cols[1]:
+                    st.metric("SQL Gen", f"{q.sql_gen_time:.2f}s")
+
+    # Handle Rerun Logic (outside loop)
+    if st.session_state.rerun_query is not None:
+        idx = st.session_state.rerun_query
+        q = queries[idx]
+        
+        with st.spinner(f"Re-running: {q.query_text[:30]}..."):
+            processor = QueryProcessor()
+            result = processor.process_natural_language(q.query_text)
+            st.session_state.rerun_query = None
+
+        if result['status'] == 'error':
+            st.error(result.get('message', 'Error running query'))
+        elif result.get('data') is not None and not result['data'].empty:
+            data = result['data']
+            chart_type = result.get('chart_type', 'table')
+            
+            # Show result in a modal-like container at the top
+            st.markdown("### 🔄 Rerun Results")
+            st.info(f"Query: {q.query_text}")
+            
+            if chart_type != 'table':
+                chart = ChartRenderer.render_chart(data, chart_type)
+                if chart:
+                    st.plotly_chart(chart, use_container_width=True, key=f"rerun_chart_{idx}")
                 else:
-                    st.warning(result.get('message', 'No results returned'))
+                    st.dataframe(data, use_container_width=True, hide_index=True)
+            else:
+                st.dataframe(data, use_container_width=True, hide_index=True)
+        else:
+            st.warning(result.get('message', 'No results returned'))
 
     if refresh_all:
         progress = st.progress(0, "Refreshing all queries...")
@@ -398,8 +431,8 @@ if st.session_state.ui_mode == 'dashboard':
             cols = st.columns([3, 1])
 
             with cols[0]:
-                with st.container(border=True, height=400):
-                    st.markdown("### Results")
+                with st.container(border=True, height=500):
+                    # st.markdown("### Results")
                     chart_type = st.session_state.dashboard_chart_type
 
                     if chart_type != 'table':
@@ -412,7 +445,7 @@ if st.session_state.ui_mode == 'dashboard':
                         st.dataframe(data, use_container_width=True, hide_index=True)
 
             with cols[1]:
-                with st.container(border=True, height=400):
+                with st.container(border=True, height=500):
                     st.markdown("### Summary")
                     st.metric("Rows", len(data))
                     st.metric("Columns", len(data.columns))
@@ -532,8 +565,8 @@ for i, message in enumerate(st.session_state.messages):
                 # Main visualization and data layout
                 cols = st.columns([3, 1])
 
-                with cols[0].container(border=True, height=400):
-                    "### Visualization"
+                with cols[0].container(border=True, height=500):
+                    # "### Visualization"
                     data = message["data"]
 
                     if current_chart != 'table':
@@ -545,7 +578,7 @@ for i, message in enumerate(st.session_state.messages):
                     else:
                         st.dataframe(data, use_container_width=True, hide_index=True)
 
-                with cols[1].container(border=True, height=400):
+                with cols[1].container(border=True, height=500):
                     "### Summary"
                     st.metric("Total Rows", len(data))
                     st.metric("Columns", len(data.columns))

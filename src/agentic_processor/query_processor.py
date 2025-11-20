@@ -5,16 +5,57 @@ import time
 
 from my_agent.WorkflowManager import WorkflowManager
 from my_agent.metrics import metrics_tracker
+from my_agent.DatabaseManager import DatabaseManager
 
 class QueryProcessor:
     def __init__(self):
         self.workflow_manager = WorkflowManager()
+        self.db_manager = DatabaseManager()
 
     def process_natural_language(self, query: str) -> Dict[str, Any]:
-        # Check cache first
+        # Check cache first - if we have cached SQL, re-execute it instead of calling LLM
         cached = metrics_tracker.get_cached_result(query)
-        if cached:
-            return cached
+        if cached and cached.get('sql_query'):
+            # Re-execute the cached SQL to get fresh data
+            try:
+                sql_query = cached['sql_query']
+                chart_type = cached.get('chart_type', 'table')
+
+                # Track cached query execution
+                session_uuid = str(uuid.uuid4())
+                metrics_tracker.start_query(session_uuid, query)
+                start_time = time.time()
+
+                # Execute the cached SQL
+                raw_results = self.db_manager.execute_query("", sql_query)
+
+                if raw_results and len(raw_results) > 0:
+                    df = pd.DataFrame(raw_results)
+
+                    # Complete metrics tracking for cached query
+                    execution_time = time.time() - start_time
+                    metrics_tracker.record_step(session_uuid, 'execution', execution_time)
+                    metrics_tracker.complete_query(
+                        session_uuid, success=True,
+                        sql_generated=sql_query, chart_type=chart_type,
+                        results_count=len(df),
+                        data=df.to_dict('records'),
+                        from_cache=True
+                    )
+                    metrics_tracker.save_to_file()
+
+                    return {
+                        "status": "success",
+                        "sql_query": sql_query,
+                        "chart_type": chart_type,
+                        "data": df,
+                        "answer": cached.get('answer', ''),
+                        "formatted_data": cached.get('formatted_data'),
+                        "from_cache": True
+                    }
+            except Exception as e:
+                # If cache execution fails, fall through to normal processing
+                print(f"Cache execution failed: {e}")
 
         # Generate a unique session ID
         session_uuid = str(uuid.uuid4())
@@ -91,7 +132,8 @@ class QueryProcessor:
             metrics_tracker.complete_query(
                 session_uuid, success=True,
                 sql_generated=sql_query, chart_type=chart_type,
-                results_count=len(df)
+                results_count=len(df),
+                data=df.to_dict('records')
             )
             # Save session analytics
             metrics_tracker.save_to_file()
