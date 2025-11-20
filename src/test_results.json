@@ -1,0 +1,455 @@
+{
+  "timestamp": "2025-11-20T09:22:17.753824",
+  "summary": {
+    "total_tests": 10,
+    "passed": 10,
+    "no_data": 0,
+    "failed": 0,
+    "total_time": 45.85,
+    "avg_time": 4.59,
+    "under_5s_percent": 70.0,
+    "under_3s_percent": 10.0,
+    "min_time": 2.97,
+    "max_time": 6.92
+  },
+  "chart_distribution": {
+    "bar": 7,
+    "line": 1,
+    "pie": 1,
+    "table": 1
+  },
+  "analytics": {
+    "total_queries": 10,
+    "avg_response_time": 4.58,
+    "success_rate": 100.0,
+    "avg_parse_time": 0.0,
+    "avg_sql_gen_time": 0.0,
+    "avg_execution_time": 0.0,
+    "queries_under_5s": 70.0,
+    "chart_distribution": {
+      "bar": 7,
+      "line": 1,
+      "pie": 1,
+      "table": 1
+    },
+    "recent_queries": [
+      {
+        "query": "Which robot vacuum models have the highest number ...",
+        "time": 5.51,
+        "success": true,
+        "chart": "bar"
+      },
+      {
+        "query": "Which warehouses are currently below their restock...",
+        "time": 5.52,
+        "success": true,
+        "chart": "bar"
+      },
+      {
+        "query": "Which Zip code has the highest number of delayed d...",
+        "time": 2.97,
+        "success": true,
+        "chart": "bar"
+      },
+      {
+        "query": "Among all manufacturers, who has the best average ...",
+        "time": 4.81,
+        "success": true,
+        "chart": "bar"
+      },
+      {
+        "query": "Plot a line chart of total monthly revenue to visu...",
+        "time": 3.28,
+        "success": true,
+        "chart": "line"
+      },
+      {
+        "query": "What is the percentage distribution of delivery st...",
+        "time": 6.92,
+        "success": true,
+        "chart": "pie"
+      },
+      {
+        "query": "Plot the average review rating per manufacturer to...",
+        "time": 4.22,
+        "success": true,
+        "chart": "bar"
+      },
+      {
+        "query": "Compare average shipping cost by carrier to evalua...",
+        "time": 4.37,
+        "success": true,
+        "chart": "bar"
+      },
+      {
+        "query": "What are the top 5 best-selling products?",
+        "time": 4.79,
+        "success": true,
+        "chart": "bar"
+      },
+      {
+        "query": "Show the total revenue by customer segment",
+        "time": 3.46,
+        "success": true,
+        "chart": "table"
+      }
+    ]
+  },
+  "queries": [
+    {
+      "query": "Which robot vacuum models have the highest number of delayed deliveries across all Chicago ZIP codes?",
+      "status": "PASSED",
+      "time": 5.51,
+      "chart_type": "bar",
+      "rows": 15,
+      "error": null
+    },
+    {
+      "query": "Which warehouses are currently below their restock threshold based on stock level and capacity?",
+      "status": "PASSED",
+      "time": 5.52,
+      "chart_type": "bar",
+      "rows": 15,
+      "error": null
+    },
+    {
+      "query": "Which Zip code has the highest number of delayed deliveries?",
+      "status": "PASSED",
+      "time": 2.97,
+      "chart_type": "bar",
+      "rows": 15,
+      "error": null
+    },
+    {
+      "query": "Among all manufacturers, who has the best average review rating for their products?",
+      "status": "PASSED",
+      "time": 4.81,
+      "chart_type": "bar",
+      "rows": 7,
+      "error": null
+    },
+    {
+      "query": "Plot a line chart of total monthly revenue to visualize sales trends over time.",
+      "status": "PASSED",
+      "time": 3.28,
+      "chart_type": "line",
+      "rows": 1,
+      "error": null
+    },
+    {
+      "query": "What is the percentage distribution of delivery statuses across all orders?",
+      "status": "PASSED",
+      "time": 6.92,
+      "chart_type": "pie",
+      "rows": 4,
+      "error": null
+    },
+    {
+      "query": "Plot the average review rating per manufacturer to analyze product satisfaction by brand.",
+      "status": "PASSED",
+      "time": 4.22,
+      "chart_type": "bar",
+      "rows": 7,
+      "error": null
+    },
+    {
+      "query": "Compare average shipping cost by carrier to evaluate cost efficiency.",
+      "status": "PASSED",
+      "time": 4.37,
+      "chart_type": "bar",
+      "rows": 3,
+      "error": null
+    },
+    {
+      "query": "What are the top 5 best-selling products?",
+      "status": "PASSED",
+      "time": 4.79,
+      "chart_type": "bar",
+      "rows": 5,
+      "error": null
+    },
+    {
+      "query": "Show the total revenue by customer segment",
+      "status": "PASSED",
+      "time": 3.46,
+      "chart_type": "table",
+      "rows": 1,
+      "error": null
+    }
+  ],
+  "session_analytics": {
+    "total_queries": 11,
+    "avg_response_time": 5.77,
+    "success_rate": 100.0,
+    "avg_parse_time": 0.0,
+    "avg_sql_gen_time": 2.29,
+    "avg_execution_time": 0.04,
+    "queries_under_5s": 54.5,
+    "chart_distribution": {
+      "bar": 7,
+      "line": 2,
+      "pie": 2
+    },
+    "recent_queries": [
+      {
+        "query": "Plot a line chart of total monthly revenue to visu...",
+        "time": 4.69,
+        "success": true,
+        "chart": "line"
+      },
+      {
+        "query": "What is the percentage distribution of delivery st...",
+        "time": 8.56,
+        "success": true,
+        "chart": "pie"
+      },
+      {
+        "query": "Which robot vacuum models have the highest number ...",
+        "time": 4.74,
+        "success": true,
+        "chart": "bar"
+      },
+      {
+        "query": "Plot a line chart of total monthly revenue to visu...",
+        "time": 4.31,
+        "success": true,
+        "chart": "line"
+      },
+      {
+        "query": "Compare average shipping cost by carrier to evalua...",
+        "time": 3.12,
+        "success": true,
+        "chart": "bar"
+      },
+      {
+        "query": "Plot the average review rating per manufacturer to...",
+        "time": 5.68,
+        "success": true,
+        "chart": "bar"
+      },
+      {
+        "query": "What is the percentage distribution of delivery st...",
+        "time": 11.13,
+        "success": true,
+        "chart": "pie"
+      },
+      {
+        "query": "Which warehouses are currently below their restock...",
+        "time": 5.25,
+        "success": true,
+        "chart": "bar"
+      },
+      {
+        "query": "Among all manufacturers, who has the best average ...",
+        "time": 4.87,
+        "success": true,
+        "chart": "bar"
+      },
+      {
+        "query": "What are the top 5 best-selling products?",
+        "time": 4.75,
+        "success": true,
+        "chart": "bar"
+      }
+    ],
+    "slow_queries": [
+      {
+        "query": "Which warehouses are currently below their restock threshold based on stock level and capacity?",
+        "time": 6.35,
+        "timestamp": "2025-11-20T13:45:16.798021",
+        "sql_gen_time": 3.5,
+        "execution_time": 0.05
+      },
+      {
+        "query": "What is the percentage distribution of delivery statuses across all orders?",
+        "time": 8.56,
+        "timestamp": "2025-11-20T13:46:21.836427",
+        "sql_gen_time": 1.94,
+        "execution_time": 0.03
+      },
+      {
+        "query": "Plot the average review rating per manufacturer to analyze product satisfaction by brand.",
+        "time": 5.68,
+        "timestamp": "2025-11-20T13:55:33.715682",
+        "sql_gen_time": 2.77,
+        "execution_time": 0.03
+      },
+      {
+        "query": "What is the percentage distribution of delivery statuses across all orders?",
+        "time": 11.13,
+        "timestamp": "2025-11-20T13:55:40.455485",
+        "sql_gen_time": 1.8,
+        "execution_time": 0.03
+      },
+      {
+        "query": "Which warehouses are currently below their restock threshold based on stock level and capacity?",
+        "time": 5.25,
+        "timestamp": "2025-11-20T13:55:58.160742",
+        "sql_gen_time": 2.23,
+        "execution_time": 0.02
+      }
+    ],
+    "cache_size": 7
+  },
+  "session_timestamp": "2025-11-20T13:56:16.363980",
+  "slow_queries": [
+    {
+      "query": "Which warehouses are currently below their restock threshold based on stock level and capacity?",
+      "time": 6.35,
+      "timestamp": "2025-11-20T13:45:16.798021",
+      "sql_gen_time": 3.5,
+      "execution_time": 0.05
+    },
+    {
+      "query": "What is the percentage distribution of delivery statuses across all orders?",
+      "time": 8.56,
+      "timestamp": "2025-11-20T13:46:21.836427",
+      "sql_gen_time": 1.94,
+      "execution_time": 0.03
+    },
+    {
+      "query": "Plot the average review rating per manufacturer to analyze product satisfaction by brand.",
+      "time": 5.68,
+      "timestamp": "2025-11-20T13:55:33.715682",
+      "sql_gen_time": 2.77,
+      "execution_time": 0.03
+    },
+    {
+      "query": "What is the percentage distribution of delivery statuses across all orders?",
+      "time": 11.13,
+      "timestamp": "2025-11-20T13:55:40.455485",
+      "sql_gen_time": 1.8,
+      "execution_time": 0.03
+    },
+    {
+      "query": "Which warehouses are currently below their restock threshold based on stock level and capacity?",
+      "time": 5.25,
+      "timestamp": "2025-11-20T13:55:58.160742",
+      "sql_gen_time": 2.23,
+      "execution_time": 0.02
+    }
+  ],
+  "query_history": [
+    {
+      "query": "Which warehouses are currently below their restock threshold based on stock level and capacity?",
+      "timestamp": "2025-11-20T13:45:16.798021",
+      "total_time": 6.35,
+      "sql_gen_time": 3.5,
+      "execution_time": 0.05,
+      "sql_query": "SELECT w.\"WarehouseID\", w.\"WarehouseStreetAddress\", wps.\"StockLevel\"\nFROM \"robot_vacuum_depot\".\"Warehouse\" w\nJOIN \"robot_vacuum_depot\".\"WarehouseProductStock\" wps ON w.\"WarehouseID\" = wps.\"WarehouseID\"\nWHERE wps.\"StockLevel\" < wps.\"RestockThreshold\"\nORDER BY wps.\"StockLevel\" ASC\nLIMIT 15",
+      "chart_type": "bar",
+      "success": true,
+      "results_count": 15
+    },
+    {
+      "query": "Plot a line chart of total monthly revenue to visualize sales trends over time.",
+      "timestamp": "2025-11-20T13:45:29.319158",
+      "total_time": 4.69,
+      "sql_gen_time": 2.13,
+      "execution_time": 0.03,
+      "sql_query": "SELECT DATE_TRUNC('month', o.\"OrderDate\") AS month, SUM(o.\"TotalAmount\") AS total_revenue\nFROM \"robot_vacuum_depot\".\"Order\" o\nGROUP BY month\nORDER BY month\nLIMIT 15",
+      "chart_type": "line",
+      "success": true,
+      "results_count": 1
+    },
+    {
+      "query": "What is the percentage distribution of delivery statuses across all orders?",
+      "timestamp": "2025-11-20T13:46:21.836427",
+      "total_time": 8.56,
+      "sql_gen_time": 1.94,
+      "execution_time": 0.03,
+      "sql_query": "SELECT o.\"DeliveryStatus\", \n       COUNT(*) * 100.0 / SUM(COUNT(*)) OVER () AS \"Percentage\"\nFROM \"robot_vacuum_depot\".\"Order\" o\nGROUP BY o.\"DeliveryStatus\"\nORDER BY \"Percentage\" DESC\nLIMIT 15",
+      "chart_type": "pie",
+      "success": true,
+      "results_count": 4
+    },
+    {
+      "query": "Which robot vacuum models have the highest number of delayed deliveries across all Chicago ZIP codes?",
+      "timestamp": "2025-11-20T13:55:16.741396",
+      "total_time": 4.74,
+      "sql_gen_time": 2.6,
+      "execution_time": 0.07,
+      "sql_query": "SELECT p.\"ModelNumber\", COUNT(o.\"OrderID\") as delayed_deliveries\nFROM \"robot_vacuum_depot\".\"Order\" o\nJOIN \"robot_vacuum_depot\".\"Product\" p ON o.\"ProductID\" = p.\"ProductID\"\nWHERE o.\"DeliveryStatus\" = 'Delayed' \nAND o.\"DeliveryZipCode\" LIKE '606%'\nGROUP BY p.\"ModelNumber\"\nORDER BY delayed_deliveries DESC\nLIMIT 15",
+      "chart_type": "bar",
+      "success": true,
+      "results_count": 15
+    },
+    {
+      "query": "Plot a line chart of total monthly revenue to visualize sales trends over time.",
+      "timestamp": "2025-11-20T13:55:23.766809",
+      "total_time": 4.31,
+      "sql_gen_time": 2.23,
+      "execution_time": 0.02,
+      "sql_query": "SELECT DATE_TRUNC('month', o.\"OrderDate\") AS month, SUM(o.\"TotalAmount\") AS total_revenue\nFROM \"robot_vacuum_depot\".\"Order\" o\nGROUP BY month\nORDER BY month\nLIMIT 15",
+      "chart_type": "line",
+      "success": true,
+      "results_count": 1
+    },
+    {
+      "query": "Compare average shipping cost by carrier to evaluate cost efficiency.",
+      "timestamp": "2025-11-20T13:55:29.306953",
+      "total_time": 3.12,
+      "sql_gen_time": 1.4,
+      "execution_time": 0.03,
+      "sql_query": "SELECT o.\"ShippingCarrier\", AVG(o.\"ShippingCost\") as average_shipping_cost\nFROM \"robot_vacuum_depot\".\"Order\" o\nGROUP BY o.\"ShippingCarrier\"\nORDER BY average_shipping_cost ASC\nLIMIT 15",
+      "chart_type": "bar",
+      "success": true,
+      "results_count": 3
+    },
+    {
+      "query": "Plot the average review rating per manufacturer to analyze product satisfaction by brand.",
+      "timestamp": "2025-11-20T13:55:33.715682",
+      "total_time": 5.68,
+      "sql_gen_time": 2.77,
+      "execution_time": 0.03,
+      "sql_query": "SELECT m.\"ManufacturerName\", AVG(r.\"ProductRating\") as average_rating\nFROM \"robot_vacuum_depot\".\"Review\" r\nJOIN \"robot_vacuum_depot\".\"Product\" p ON r.\"ProductID\" = p.\"ProductID\"\nJOIN \"robot_vacuum_depot\".\"Manufacturer\" m ON p.\"ManufacturerID\" = m.\"ManufacturerID\"\nGROUP BY m.\"ManufacturerName\"\nORDER BY average_rating DESC\nLIMIT 15",
+      "chart_type": "bar",
+      "success": true,
+      "results_count": 7
+    },
+    {
+      "query": "What is the percentage distribution of delivery statuses across all orders?",
+      "timestamp": "2025-11-20T13:55:40.455485",
+      "total_time": 11.13,
+      "sql_gen_time": 1.8,
+      "execution_time": 0.03,
+      "sql_query": "SELECT o.\"DeliveryStatus\", \n       COUNT(*) * 100.0 / SUM(COUNT(*)) OVER () AS \"Percentage\"\nFROM \"robot_vacuum_depot\".\"Order\" o\nGROUP BY o.\"DeliveryStatus\"\nORDER BY \"Percentage\" DESC\nLIMIT 15",
+      "chart_type": "pie",
+      "success": true,
+      "results_count": 4
+    },
+    {
+      "query": "Which warehouses are currently below their restock threshold based on stock level and capacity?",
+      "timestamp": "2025-11-20T13:55:58.160742",
+      "total_time": 5.25,
+      "sql_gen_time": 2.23,
+      "execution_time": 0.02,
+      "sql_query": "SELECT w.\"WarehouseID\", w.\"WarehouseStreetAddress\", wps.\"StockLevel\"\nFROM \"robot_vacuum_depot\".\"Warehouse\" w\nJOIN \"robot_vacuum_depot\".\"WarehouseProductStock\" wps ON w.\"WarehouseID\" = wps.\"WarehouseID\"\nWHERE wps.\"StockLevel\" < wps.\"RestockThreshold\"\nORDER BY wps.\"StockLevel\" ASC\nLIMIT 15",
+      "chart_type": "bar",
+      "success": true,
+      "results_count": 15
+    },
+    {
+      "query": "Among all manufacturers, who has the best average review rating for their products?",
+      "timestamp": "2025-11-20T13:56:04.977968",
+      "total_time": 4.87,
+      "sql_gen_time": 2.58,
+      "execution_time": 0.06,
+      "sql_query": "SELECT m.\"ManufacturerName\", AVG(r.\"ProductRating\") as average_rating\nFROM \"robot_vacuum_depot\".\"Manufacturer\" m\nJOIN \"robot_vacuum_depot\".\"Product\" p ON m.\"ManufacturerID\" = p.\"ManufacturerID\"\nJOIN \"robot_vacuum_depot\".\"Review\" r ON p.\"ProductID\" = r.\"ProductID\"\nGROUP BY m.\"ManufacturerName\"\nORDER BY average_rating DESC\nLIMIT 15",
+      "chart_type": "bar",
+      "success": true,
+      "results_count": 7
+    },
+    {
+      "query": "What are the top 5 best-selling products?",
+      "timestamp": "2025-11-20T13:56:11.617430",
+      "total_time": 4.75,
+      "sql_gen_time": 1.98,
+      "execution_time": 0.03,
+      "sql_query": "SELECT p.\"ProductName\", SUM(o.\"Quantity\") as total_sales\nFROM \"robot_vacuum_depot\".\"Order\" o\nJOIN \"robot_vacuum_depot\".\"Product\" p ON o.\"ProductID\" = p.\"ProductID\"\nGROUP BY p.\"ProductName\"\nORDER BY total_sales DESC\nLIMIT 5",
+      "chart_type": "bar",
+      "success": true,
+      "results_count": 5
+    }
+  ]
+}
