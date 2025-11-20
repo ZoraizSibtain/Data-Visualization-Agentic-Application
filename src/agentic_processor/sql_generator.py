@@ -12,22 +12,26 @@ class SQLGenerator:
     def _get_schema_info(self) -> str:
         return """
         Tables and Columns:
-        
-        Manufacturer(ManufacturerID, ManufacturerName, ReliabilityScore)
-        Product(ProductID, ProductName, ProductDescription, ModelNumber, ManufacturerID, ProductPrice)
-        Customer(CustomerID, CustomerName, CustomerEmail, CustomerZipCode, CustomerAddress, Segment)
+
+        Customer(CustomerID, CustomerName, CustomerEmail, CustomerStreetAddress, CustomerZipCode, BillingZipCode, Segment)
+        Manufacturer(ManufacturerID, ManufacturerName, Country, LeadTimeDays, ReliabilityScore)
+        Product(ProductID, ProductName, ModelNumber, ManufacturerID, UnitPrice, ProductDescription)
         Warehouse(WarehouseID, WarehouseStreetAddress, WarehouseZipCode, WarehouseCapacity)
-        DistributionCenter(DistributionCenterID, DistributionCenterStreetAddress, DistributionCenterZipCode, FleetSize)
-        Order(OrderID, OrderDate, CustomerID, ProductID, DeliveryStatus, DeliveryAddress, DeliveryZipCode, ShippingCost, ShippingCarrier, TotalAmount, TaxAmount, DiscountAmount, Quantity, PaymentMethod, ExpectedDeliveryDate, ActualDeliveryDate)
-        Review(ReviewID, OrderID, ReviewRating, ReviewText, ReviewDate, ReviewSentiment)
-        WarehouseProductStock(WarehouseID, ProductID, StockLevel, RestockThreshold, LastRestockDate)
-        WarehouseDistributionCenter(WarehouseID, DistributionCenterID, LeadTimeDays)
-        
+        DistributionCenter(DistributionCenterID, Region, DistributionCenterStreetAddress, DistributionCenterZipCode, FleetSize)
+        WarehouseDistributionCenter(WarehouseID, DistributionCenterID)
+        WarehouseProductStock(WarehouseID, ProductID, StockLevel, RestockThreshold, LastRestockDate, LastUpdateDate)
+        Order(OrderID, CustomerID, ProductID, WarehouseID, DistributionCenterID, Quantity, UnitPrice, DiscountAmount, PromoCode, TaxAmount, ShippingCost, CostOfGoods, TotalAmount, OrderDate, ExpectedDeliveryDate, ActualDeliveryDate, DeliveryStatus, PaymentMethod, CardNumber, CardBrand, BillingZipCode, DeliveryStreetAddress, DeliveryZipCode, ShippingCarrier)
+        Review(ReviewID, OrderID, CustomerID, ProductID, ProductRating, ReviewText, ReviewDate, ReviewSentiment)
+
         Relationships:
         - Product.ManufacturerID -> Manufacturer.ManufacturerID
         - Order.CustomerID -> Customer.CustomerID
         - Order.ProductID -> Product.ProductID
+        - Order.WarehouseID -> Warehouse.WarehouseID
+        - Order.DistributionCenterID -> DistributionCenter.DistributionCenterID
         - Review.OrderID -> Order.OrderID
+        - Review.CustomerID -> Customer.CustomerID
+        - Review.ProductID -> Product.ProductID
         - WarehouseProductStock.WarehouseID -> Warehouse.WarehouseID
         - WarehouseProductStock.ProductID -> Product.ProductID
         - WarehouseDistributionCenter.WarehouseID -> Warehouse.WarehouseID
@@ -44,14 +48,22 @@ class SQLGenerator:
         Rules:
         1. Return ONLY the SQL query, no markdown formatting, no explanations.
         2. Use standard PostgreSQL syntax.
-        3. IMPORTANT: All table and column names are case-sensitive and must be quoted with double quotes. Examples:
-           - "Order"."Quantity"
-           - "Product"."ProductName"
-           - "Manufacturer"."ManufacturerName"
-        4. Handle case-insensitivity for string comparisons using ILIKE if needed.
-        5. For date operations, use PostgreSQL specific functions like DATE_TRUNC.
-        6. Ensure all joins are correct based on the schema relationships.
-        7. Always use table aliases and fully qualify column names with double quotes.
+        3. IMPORTANT: All tables are in the robot_vacuum_depot schema. You MUST prefix all table names with the schema.
+        4. IMPORTANT: All table names and column names use PascalCase and MUST be quoted with double quotes. Examples:
+           - robot_vacuum_depot."Customer"
+           - robot_vacuum_depot."Product"
+           - robot_vacuum_depot."Manufacturer"
+           - robot_vacuum_depot."Order"
+        5. Column names must also be quoted with double quotes in PascalCase. Examples:
+           - "DeliveryStatus"
+           - "ProductName"
+           - "ManufacturerName"
+           - "OrderDate"
+        6. Handle case-insensitivity for string comparisons using ILIKE if needed.
+        7. For date operations, use PostgreSQL specific functions like DATE_TRUNC.
+        8. Ensure all joins are correct based on the schema relationships.
+        9. IMPORTANT: When using table aliases, you MUST use the alias consistently throughout the query. Example:
+           - FROM robot_vacuum_depot."Order" AS o ... use o."OrderDate", NOT "Order"."OrderDate"
 
         User Query: {query}
 

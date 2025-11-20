@@ -3,7 +3,7 @@ from sqlalchemy import create_engine, text
 from typing import Dict, Any
 from agentic_processor.sql_generator import SQLGenerator
 from agentic_processor.chart_detector import ChartDetector
-from data_processing.database import DATABASE_URL
+from config.settings import DATABASE_URL
 
 class QueryProcessor:
     def __init__(self):

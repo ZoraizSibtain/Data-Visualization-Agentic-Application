@@ -5,8 +5,8 @@ A Data Visualization Agentic Application that enables natural language query pro
 ## Setup Instructions
 
 ### 1. Prerequisites
-- Python 3.11+
-- PostgreSQL 15+
+- Python
+- PostgreSQL
 - OpenAI API Key
 
 ### 2. Install Dependencies
@@ -27,14 +27,30 @@ OPENAI_API_KEY=your-api-key-here
 ```
 
 ### 4. Setup Database
+
+#### Option A: Using Go (recommended)
 ```bash
-# Ensure PostgreSQL is running, then load data
-python -m data_processing.data_loader
+# Ensure PostgreSQL is running
+# Navigate to the Go source directory
+cd src/go
+
+# Initialize Go module and install PostgreSQL driver
+go mod init robotvacuum
+go get github.com/lib/pq
+
+# Test Connection
+go run main.go
+
+# Create/recreate the database schema (drops existing data)
+go run create_schema.go
+
+# Load the master data from CSV
+go run ingest_masterdata.go
 ```
 
 ### 5. Run Application
 ```bash
-streamlit run app.py
+python3 -m streamlit run app.py
 ```
 
 ## Features
