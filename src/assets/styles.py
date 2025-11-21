@@ -64,5 +64,38 @@ CUSTOM_CSS = """
         transform: translateY(-2px);
         box-shadow: 0 4px 12px rgba(0,0,0,0.15);
     }
+
+    /* Scroll to top button */
+    .scroll-to-top {
+        position: fixed;
+        bottom: 30px;
+        right: 30px;
+        z-index: 1000;
+        background: #4b6cb7;
+        color: white;
+        width: 50px;
+        height: 50px;
+        border-radius: 50%;
+        text-align: center;
+        line-height: 50px;
+        font-size: 24px;
+        cursor: pointer;
+        box-shadow: 0 4px 12px rgba(0,0,0,0.2);
+        transition: all 0.3s ease;
+        opacity: 0.8;
+        text-decoration: none;
+    }
+    .scroll-to-top:hover {
+        transform: translateY(-5px);
+        opacity: 1;
+        box-shadow: 0 6px 16px rgba(0,0,0,0.3);
+    }
 </style>
+
+<script>
+    // Scroll to top functionality
+    function scrollToTop() {
+        window.scrollTo({top: 0, behavior: 'smooth'});
+    }
+</script>
 """

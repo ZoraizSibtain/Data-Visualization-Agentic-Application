@@ -31,13 +31,20 @@ class ChartRenderer:
         return fig
 
     @staticmethod
-    def render_chart(df: pd.DataFrame, chart_type: str):
+    def render_chart(df: pd.DataFrame, chart_type: str, query_text: str = None):
         if df is None or df.empty:
             return None
             
         try:
             fig = None
             
+            # Check for highlighting keywords
+            highlight_max = False
+            if query_text:
+                keywords = ['highest', 'best', 'top', 'most', 'maximum', 'peak']
+                if any(k in query_text.lower() for k in keywords):
+                    highlight_max = True
+
             if chart_type == "line":
                 # Heuristic: Assume first column is x-axis (often date), second is y-axis (metric)
                 if len(df.columns) < 2:
@@ -75,10 +82,36 @@ class ChartRenderer:
                 df_plot = df.copy()
                 df_plot[x_col] = df_plot[x_col].astype(str)
                 
-                fig = px.bar(
-                    df_plot, x=x_col, y=y_col,
-                    color_discrete_sequence=ChartRenderer.COLORS
-                )
+                # Determine colors
+                colors = ChartRenderer.COLORS
+                if highlight_max:
+                    # Find max value index
+                    try:
+                        max_idx = df_plot[y_col].idxmax()
+                        # Create a color list where max is distinct (e.g., Gold/Orange) and others are standard Blue
+                        # Using a list of colors for each bar
+                        bar_colors = ['#2E86C1'] * len(df_plot) # Default Blue
+                        # Set max value to Gold/Orange
+                        # We need integer position
+                        pos = df_plot.index.get_loc(max_idx)
+                        bar_colors[pos] = '#F39C12' # Orange/Gold
+                        
+                        fig = px.bar(
+                            df_plot, x=x_col, y=y_col
+                        )
+                        fig.update_traces(marker_color=bar_colors)
+                    except:
+                        # Fallback if something fails
+                        fig = px.bar(
+                            df_plot, x=x_col, y=y_col,
+                            color_discrete_sequence=ChartRenderer.COLORS
+                        )
+                else:
+                    fig = px.bar(
+                        df_plot, x=x_col, y=y_col,
+                        color_discrete_sequence=ChartRenderer.COLORS
+                    )
+                
                 fig = ChartRenderer._apply_layout(fig, "Comparison Analysis")
                     
             elif chart_type == "pie":

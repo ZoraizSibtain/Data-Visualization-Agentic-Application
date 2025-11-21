@@ -2,11 +2,19 @@ from langchain_core.prompts import ChatPromptTemplate
 from langchain_core.output_parsers import JsonOutputParser
 from .DatabaseManager import DatabaseManager
 from .LLMManager import LLMManager
+from .RAGLayer import RAGLayer
 
 class SQLAgent:
-    def __init__(self):
+    def __init__(self, use_rag: bool = True):
         self.db_manager = DatabaseManager()
         self.llm_manager = LLMManager()
+        self.use_rag = use_rag
+        try:
+            self.rag_layer = RAGLayer() if use_rag else None
+        except Exception as e:
+            print(f"Warning: RAG layer initialization failed: {e}")
+            self.rag_layer = None
+            self.use_rag = False
 
     def parse_question(self, state: dict) -> dict:
         """Parse user question and identify relevant tables and columns."""
@@ -36,10 +44,14 @@ The "noun_columns" field should contain only the columns that are relevant to th
         ])
 
         output_parser = JsonOutputParser()
-        
-        response = self.llm_manager.invoke(prompt, schema=schema, question=question)
-        parsed_response = output_parser.parse(response)
-        return {"parsed_question": parsed_response}
+
+        try:
+            response = self.llm_manager.invoke(prompt, schema=schema, question=question)
+            parsed_response = output_parser.parse(response)
+            return {"parsed_question": parsed_response}
+        except Exception as e:
+            print(f"Error parsing question: {e}")
+            return {"parsed_question": {"is_relevant": False, "relevant_tables": []}, "error": str(e)}
 
     def get_unique_nouns(self, state: dict) -> dict:
         """Find unique nouns in relevant tables and columns."""
@@ -129,12 +141,16 @@ IMPORTANT: For schema.table names like robot_vacuum_depot.Order, quote them sepa
 Generate SQL query string'''),
         ])
 
-        response = self.llm_manager.invoke(prompt, schema=schema, question=question, parsed_question=parsed_question, unique_nouns=unique_nouns)
-        
-        if response.strip() == "NOT_ENOUGH_INFO":
-            return {"sql_query": "NOT_RELEVANT"}
-        else:
-            return {"sql_query": response}
+        try:
+            response = self.llm_manager.invoke(prompt, schema=schema, question=question, parsed_question=parsed_question, unique_nouns=unique_nouns)
+
+            if response.strip() == "NOT_ENOUGH_INFO":
+                return {"sql_query": "NOT_RELEVANT"}
+            else:
+                return {"sql_query": response}
+        except Exception as e:
+            print(f"Error generating SQL: {e}")
+            return {"sql_query": "NOT_RELEVANT", "error": str(e)}
 
     def validate_and_fix_sql(self, state: dict) -> dict:
         """Validate and fix the generated SQL query."""
@@ -197,17 +213,23 @@ For example:
         ])
 
         output_parser = JsonOutputParser()
-        response = self.llm_manager.invoke(prompt, schema=schema, sql_query=sql_query)
-        result = output_parser.parse(response)
 
-        if result["valid"] and result["issues"] is None:
-            return {"sql_query": sql_query, "sql_valid": True}
-        else:
-            return {
-                "sql_query": result["corrected_query"],
-                "sql_valid": result["valid"],
-                "sql_issues": result["issues"]
-            }
+        try:
+            response = self.llm_manager.invoke(prompt, schema=schema, sql_query=sql_query)
+            result = output_parser.parse(response)
+
+            if result["valid"] and result["issues"] is None:
+                return {"sql_query": sql_query, "sql_valid": True}
+            else:
+                return {
+                    "sql_query": result["corrected_query"],
+                    "sql_valid": result["valid"],
+                    "sql_issues": result["issues"]
+                }
+        except Exception as e:
+            print(f"Error validating SQL: {e}")
+            # Return original query if validation fails
+            return {"sql_query": sql_query, "sql_valid": False, "sql_issues": str(e)}
 
     def execute_sql(self, state: dict) -> dict:
         """Execute SQL query and return results."""
@@ -239,8 +261,12 @@ For example:
             ("human", "User question: {question}\n\nQuery results: {results}\n\nFormatted response:"),
         ])
 
-        response = self.llm_manager.invoke(prompt, question=question, results=results)
-        return {"answer": response}
+        try:
+            response = self.llm_manager.invoke(prompt, question=question, results=results)
+            return {"answer": response}
+        except Exception as e:
+            print(f"Error formatting results: {e}")
+            return {"answer": f"Query returned {len(results) if isinstance(results, list) else 0} results."}
 
     def choose_visualization(self, state: dict) -> dict:
         """Choose an appropriate visualization for the data."""
@@ -311,12 +337,23 @@ Recommend a visualization:'''),
     # ==================== OPTIMIZED METHODS ====================
 
     def generate_sql_direct(self, state: dict) -> dict:
-        """Generate SQL query directly without parsing step - optimized for speed."""
+        """Generate SQL query directly without parsing step - optimized for speed with RAG enhancement."""
         question = state['question']
         schema = self.db_manager.get_schema(state['uuid'])
 
-        prompt = ChatPromptTemplate.from_messages([
-            ("system", '''You are an expert SQL developer. Generate a valid PostgreSQL query for the given question and schema.
+        # Get RAG context if available
+        rag_examples = ""
+        rag_context = ""
+        if self.use_rag and self.rag_layer:
+            try:
+                rag_data = self.rag_layer.enhance_sql_generation(state)
+                rag_examples = rag_data.get('rag_examples', '')
+                rag_context = rag_data.get('rag_business_context', '')
+            except Exception as e:
+                print(f"RAG enhancement failed: {e}")
+
+        # Build system prompt with optional RAG context
+        system_prompt = '''You are an expert SQL developer. Generate a valid PostgreSQL query for the given question and schema.
 
 IMPORTANT RULES:
 1. Always use schema-qualified table names: "robot_vacuum_depot"."TableName"
@@ -327,7 +364,15 @@ IMPORTANT RULES:
 6. CRITICAL: When selecting columns from multiple tables, you MUST include proper JOINs
 7. Use table aliases for clarity (e.g., o for Order, p for Product)
 8. For aggregations (pie charts, bar charts, rankings), add LIMIT 15
-9. If the question is not relevant to the schema, respond with exactly: NOT_RELEVANT
+9. If the question is not relevant to the schema, respond with exactly: NOT_RELEVANT'''
+
+        if rag_context:
+            system_prompt += f"\n\nBusiness Context:\n{rag_context}"
+
+        if rag_examples:
+            system_prompt += f"\n\nSimilar Query Examples:\n{rag_examples}"
+
+        system_prompt += '''
 
 Example:
 SELECT p."ProductName", COUNT(*) as order_count
@@ -337,7 +382,10 @@ GROUP BY p."ProductName"
 ORDER BY order_count DESC
 LIMIT 15
 
-Just return the SQL query string, nothing else.'''),
+Just return the SQL query string, nothing else.'''
+
+        prompt = ChatPromptTemplate.from_messages([
+            ("system", system_prompt),
             ("human", '''Schema:
 {schema}
 
@@ -346,19 +394,23 @@ Question: {question}
 Generate SQL query:'''),
         ])
 
-        response = self.llm_manager.invoke(prompt, schema=schema, question=question)
+        try:
+            response = self.llm_manager.invoke(prompt, schema=schema, question=question)
 
-        if "NOT_RELEVANT" in response.upper():
-            return {"sql_query": "NOT_RELEVANT", "parsed_question": {"is_relevant": False}}
+            if "NOT_RELEVANT" in response.upper():
+                return {"sql_query": "NOT_RELEVANT", "parsed_question": {"is_relevant": False}}
 
-        # Clean up the response
-        sql = response.strip()
-        if sql.startswith('```'):
-            sql = sql.split('\n', 1)[1] if '\n' in sql else sql[3:]
-        if sql.endswith('```'):
-            sql = sql[:-3]
+            # Clean up the response
+            sql = response.strip()
+            if sql.startswith('```'):
+                sql = sql.split('\n', 1)[1] if '\n' in sql else sql[3:]
+            if sql.endswith('```'):
+                sql = sql[:-3]
 
-        return {"sql_query": sql.strip(), "parsed_question": {"is_relevant": True}}
+            return {"sql_query": sql.strip(), "parsed_question": {"is_relevant": True}}
+        except Exception as e:
+            print(f"Error in generate_sql_direct: {e}")
+            return {"sql_query": "NOT_RELEVANT", "parsed_question": {"is_relevant": False}, "error": str(e)}
 
     def format_and_visualize(self, state: dict) -> dict:
         """Combined format results and choose visualization - single LLM call."""
@@ -407,19 +459,19 @@ Provide answer and visualization:'''),
         # Limit results for prompt
         display_results = results[:10] if isinstance(results, list) else results
 
-        response = self.llm_manager.invoke(
-            prompt,
-            question=question,
-            sql_query=sql_query,
-            results=str(display_results)
-        )
-
-        # Parse response
-        answer = ""
-        visualization = "none"
-        reason = ""
-
         try:
+            response = self.llm_manager.invoke(
+                prompt,
+                question=question,
+                sql_query=sql_query,
+                results=str(display_results)
+            )
+
+            # Parse response
+            answer = ""
+            visualization = "none"
+            reason = ""
+
             lines = [line.strip() for line in response.split('\n') if line.strip()]
             for line in lines:
                 if line.startswith('Answer:'):
@@ -428,15 +480,20 @@ Provide answer and visualization:'''),
                     visualization = line.split(':', 1)[1].strip().lower()
                 elif line.startswith('Reason:'):
                     reason = line.split(':', 1)[1].strip()
-        except Exception:
-            answer = response
 
-        # Normalize visualization
-        if visualization not in ['bar', 'horizontal_bar', 'line', 'pie', 'scatter', 'none']:
-            visualization = 'none'
+            # Normalize visualization
+            if visualization not in ['bar', 'horizontal_bar', 'line', 'pie', 'scatter', 'none']:
+                visualization = 'none'
 
-        return {
-            "answer": answer or "Query completed successfully.",
-            "visualization": visualization,
-            "visualization_reason": reason
-        }
+            return {
+                "answer": answer or "Query completed successfully.",
+                "visualization": visualization,
+                "visualization_reason": reason
+            }
+        except Exception as e:
+            print(f"Error in format_and_visualize: {e}")
+            return {
+                "answer": f"Query returned {len(results) if isinstance(results, list) else 0} results.",
+                "visualization": "bar",  # Default to bar chart
+                "visualization_reason": "Default visualization due to processing error"
+            }

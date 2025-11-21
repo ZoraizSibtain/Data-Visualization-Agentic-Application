@@ -4,8 +4,11 @@ langgraph
 langchain-openai
 polars
 pandas
+numpy
 psycopg2-binary
 sqlalchemy
 plotly
 python-dotenv
 openai
+fpdf
+kaleido

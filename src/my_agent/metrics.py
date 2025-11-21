@@ -48,7 +48,9 @@ class MetricsTracker:
         self.slow_queries: List[Dict[str, Any]] = []  # Queries > 5s
         self.query_cache: Dict[str, Any] = {}  # Cache for common queries
         self.max_cache_size = 50
+        self.saved_queries: List[Dict[str, Any]] = [] # Explicitly saved queries
         self._load_from_file()  # Load persisted data on startup
+        self._load_saved_queries() # Load saved queries
 
     def start_query(self, session_id: str, query_text: str) -> None:
         """Start tracking a new query"""
@@ -204,6 +206,50 @@ class MetricsTracker:
             oldest_key = next(iter(self.query_cache))
             del self.query_cache[oldest_key]
         self.query_cache[cache_key] = result
+
+    def is_query_saved(self, query_text: str) -> bool:
+        """Check if a query is already saved"""
+        if not query_text:
+            return False
+        return any(q['query_text'] == query_text for q in self.saved_queries)
+
+    def save_query(self, query_data: Dict[str, Any]) -> None:
+        """Save a query for future use"""
+        # Check if already saved
+        if self.is_query_saved(query_data['query_text']):
+            return
+        
+        query_data['saved_at'] = datetime.now().isoformat()
+        self.saved_queries.append(query_data)
+        self._save_saved_queries()
+
+    def delete_saved_query(self, index: int) -> None:
+        """Delete a saved query by index"""
+        if 0 <= index < len(self.saved_queries):
+            self.saved_queries.pop(index)
+            self._save_saved_queries()
+
+    def _save_saved_queries(self, filepath: str = 'saved_queries.json') -> None:
+        """Persist saved queries to file"""
+        import json
+        try:
+            with open(filepath, 'w') as f:
+                json.dump(self.saved_queries, f, indent=2, default=str)
+        except Exception as e:
+            print(f"Error saving queries: {e}")
+
+    def _load_saved_queries(self, filepath: str = 'saved_queries.json') -> None:
+        """Load saved queries from file"""
+        import json
+        import os
+        if not os.path.exists(filepath):
+            return
+        
+        try:
+            with open(filepath, 'r') as f:
+                self.saved_queries = json.load(f)
+        except Exception:
+            pass
 
     def clear(self) -> None:
         """Clear all metrics"""

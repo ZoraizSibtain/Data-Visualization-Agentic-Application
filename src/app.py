@@ -6,6 +6,7 @@ load_dotenv()
 
 from agentic_processor.query_processor import QueryProcessor
 from visualization.chart_renderer import ChartRenderer
+from my_agent.metrics import metrics_tracker
 
 # Page configuration
 st.set_page_config(
@@ -66,8 +67,8 @@ with title_row[0]:
     st.title("🤖 Robot Vacuum Depot Analytics", anchor=False)
 
 with title_row[1]:
-    ui_modes = ['Chat', 'Dashboard', 'Analytics', 'History']
-    mode_map = {'chat': 0, 'dashboard': 1, 'analytics': 2, 'history': 3}
+    ui_modes = ['Chat', 'Dashboard', 'Analytics', 'History', 'Saved']
+    mode_map = {'chat': 0, 'dashboard': 1, 'analytics': 2, 'history': 3, 'saved': 4}
     current_mode_idx = mode_map.get(st.session_state.ui_mode, 0)
     selected_mode = st.selectbox(
         "UI Mode",
@@ -189,8 +190,7 @@ if st.session_state.ui_mode == 'analytics':
 
         with perf_cols[0]:
             st.markdown("### Performance Breakdown")
-
-            st.markdown("**Timing (average)**")
+            st.caption("Timing (average)")
             timing_cols = st.columns(3)
             with timing_cols[0]:
                 st.metric("SQL Gen", f"{analytics['avg_sql_gen_time']}s")
@@ -199,7 +199,7 @@ if st.session_state.ui_mode == 'analytics':
             with timing_cols[2]:
                 st.metric("Parsing", f"{analytics['avg_parse_time']}s")
 
-            st.markdown("**Chart Distribution**")
+            st.markdown("Chart Distribution")
             chart_types = list(analytics['chart_distribution'].keys())
             chart_counts = list(analytics['chart_distribution'].values())
             if chart_types:
@@ -210,15 +210,20 @@ if st.session_state.ui_mode == 'analytics':
 
         with perf_cols[1]:
             st.markdown("### Cache Performance")
-            st.markdown(f"**Cache Size: {analytics.get('cache_size', 0)} queries cached**")
+            st.markdown(f"Cache Size: {analytics.get('cache_size', 0)} queries cached")
 
             cache_cols = st.columns(2)
             with cache_cols[0]:
                 st.metric("Cached Queries", analytics.get('cached_queries', 0))
-                st.metric("Avg Cached Time", f"{analytics.get('avg_cached_time', 0)}s")
             with cache_cols[1]:
                 st.metric("Non-cached Queries", analytics.get('non_cached_queries', 0))
-                st.metric("Avg Non-cached Time", f"{analytics.get('avg_non_cached_time', 0)}s")
+            
+            st.caption("Timing (average)")
+            time_cols = st.columns(2)
+            with time_cols[0]:
+                st.metric("Cached", f"{analytics.get('avg_cached_time', 0)}s")
+            with time_cols[1]:
+                st.metric("Non-Cached", f"{analytics.get('avg_non_cached_time', 0)}s")
 
         st.markdown("---")
 
@@ -279,7 +284,7 @@ if st.session_state.ui_mode == 'history':
                 try:
                     df = pd.DataFrame(q.result_data)
                     if not df.empty and q.chart_type != 'table':
-                        chart = ChartRenderer.render_chart(df, q.chart_type)
+                        chart = ChartRenderer.render_chart(df, q.chart_type, q.query_text)
                         if chart:
                             st.plotly_chart(chart, use_container_width=True, key=f"hist_chart_{idx}")
                         else:
@@ -304,9 +309,24 @@ if st.session_state.ui_mode == 'history':
             st.caption(f"{status_icon} {timestamp}")
             
             # Actions
-            if st.button("🔄 Rerun", key=f"rerun_{idx}", use_container_width=True):
-                st.session_state.rerun_query = idx
-                st.rerun()
+            ac_col1, ac_col2 = st.columns(2)
+            with ac_col1:
+                if st.button("🔄 Rerun", key=f"rerun_{idx}", use_container_width=True):
+                    st.session_state.rerun_query = idx
+                    st.rerun()
+            with ac_col2:
+                is_saved = metrics_tracker.is_query_saved(q.query_text)
+                if is_saved:
+                    st.button("✅ Saved", key=f"hist_saved_{idx}", disabled=True, use_container_width=True)
+                else:
+                    if st.button("⭐ Save", key=f"hist_save_{idx}", use_container_width=True):
+                        metrics_tracker.save_query({
+                            'query_text': q.query_text,
+                            'sql_query': q.sql_generated,
+                            'chart_type': q.chart_type,
+                            'result_data': q.result_data
+                        })
+                        st.rerun()
 
             # View Details Expander
             with st.expander("Details"):
@@ -338,7 +358,7 @@ if st.session_state.ui_mode == 'history':
             st.info(f"Query: {q.query_text}")
             
             if chart_type != 'table':
-                chart = ChartRenderer.render_chart(data, chart_type)
+                chart = ChartRenderer.render_chart(data, chart_type, q.query_text)
                 if chart:
                     st.plotly_chart(chart, use_container_width=True, key=f"rerun_chart_{idx}")
                 else:
@@ -436,7 +456,7 @@ if st.session_state.ui_mode == 'dashboard':
                     chart_type = st.session_state.dashboard_chart_type
 
                     if chart_type != 'table':
-                        chart = ChartRenderer.render_chart(data, chart_type)
+                        chart = ChartRenderer.render_chart(data, chart_type, st.session_state.dashboard_query)
                         if chart:
                             st.plotly_chart(chart, use_container_width=True, key="dashboard_plotly")
                         else:
@@ -459,6 +479,19 @@ if st.session_state.ui_mode == 'dashboard':
                         use_container_width=True,
                         key="dashboard_download"
                     )
+                    
+                    is_saved = metrics_tracker.is_query_saved(st.session_state.dashboard_query)
+                    if is_saved:
+                        st.button("✅ Saved", key="dash_saved", disabled=True, use_container_width=True)
+                    else:
+                        if st.button("⭐ Save Query", key="dash_save", use_container_width=True):
+                            metrics_tracker.save_query({
+                                'query_text': st.session_state.dashboard_query,
+                                'sql_query': result.get('sql_query'),
+                                'chart_type': st.session_state.dashboard_chart_type,
+                                'result_data': data.to_dict('records')
+                            })
+                            st.rerun()
 
             # SQL details (expanded by default)
             with st.expander("Generated SQL", expanded=True):
@@ -490,6 +523,239 @@ if st.session_state.ui_mode == 'dashboard':
 
     st.stop()
 
+# ==================== SAVED UI ====================
+if st.session_state.ui_mode == 'saved':
+    from my_agent.metrics import metrics_tracker
+    from fpdf import FPDF
+    import tempfile
+    import plotly.io as pio
+    
+    saved_queries = metrics_tracker.saved_queries
+    
+    if not saved_queries:
+        st.info("No saved queries yet. Star ⭐ queries in Chat, Dashboard or History to save them here.")
+        st.stop()
+
+    # Header with actions
+    h_col1, h_col2 = st.columns([3, 1])
+    with h_col1:
+        st.markdown("### 📑 Saved Queries")
+    with h_col2:
+        # Select All button that directly updates checkbox widget states
+        if st.button("Select All", key="select_all_saved"):
+            # Check if all are currently selected
+            all_selected = all(st.session_state.get(f"select_{i}", False) for i in range(len(saved_queries)))
+            # Toggle all checkboxes
+            for i in range(len(saved_queries)):
+                st.session_state[f"select_{i}"] = not all_selected
+            st.rerun()
+
+    # Container for the grid
+    st.markdown("---")
+
+    # Grid Layout (4 columns)
+    NUM_COLS = 4
+    cols = st.columns(NUM_COLS)
+
+    selected_indices = []
+
+    for i, q in enumerate(saved_queries):
+        col_idx = i % NUM_COLS
+
+        with cols[col_idx].container(border=True):
+            # Header Row: Checkbox and Query
+            c1, c2 = st.columns([0.15, 0.85])
+            with c1:
+                is_selected = st.checkbox("Select", key=f"select_{i}", label_visibility="collapsed")
+                if is_selected:
+                    selected_indices.append(i)
+            with c2:
+                st.markdown(f"**{q['query_text']}**")
+            
+            st.markdown("---")
+            
+            # Chart Area
+            if q.get('result_data'):
+                try:
+                    df = pd.DataFrame(q['result_data'])
+                    chart_type = q.get('chart_type', 'table')
+                    if not df.empty and chart_type != 'table':
+                        chart = ChartRenderer.render_chart(df, chart_type, q['query_text'])
+                        if chart:
+                            # Simplified chart for card view
+                            chart.update_layout(height=200, margin=dict(l=10, r=10, t=30, b=10), showlegend=False)
+                            st.plotly_chart(chart, use_container_width=True, key=f"saved_chart_{i}", config={'displayModeBar': False})
+                        else:
+                            st.dataframe(df.head(5), use_container_width=True, hide_index=True)
+                    else:
+                        st.dataframe(df.head(5), use_container_width=True, hide_index=True)
+                except Exception as e:
+                    st.caption(f"Preview unavailable")
+            else:
+                st.info("No data", icon="ℹ️")
+
+            # Metrics/Info Row
+            m_col1, m_col2 = st.columns(2)
+            with m_col1:
+                st.caption(f"📅 {q.get('saved_at', 'Unknown')[:10]}")
+            with m_col2:
+                st.caption(f"📊 {q.get('chart_type', 'table').title()}")
+            
+            # Actions
+            if st.button("🗑️ Delete", key=f"del_saved_{i}", use_container_width=True):
+                metrics_tracker.delete_saved_query(i)
+                st.rerun()
+
+            # Details Expander
+            with st.expander("Details"):
+                st.code(q.get('sql_query', ''), language='sql')
+
+    st.markdown("---")
+    
+    # PDF Generation Action
+    if selected_indices:
+        st.markdown(f"### 📤 Export ({len(selected_indices)} selected)")
+
+        # Store selected indices for PDF generation
+        if st.button("Generate PDF Report", type="primary"):
+            st.session_state.pdf_selected_indices = selected_indices.copy()
+
+        # Generate PDF if we have pending indices
+        if 'pdf_selected_indices' in st.session_state and st.session_state.pdf_selected_indices:
+            with st.spinner("Generating PDF report... this may take a moment"):
+                try:
+                    class PDF(FPDF):
+                        def header(self):
+                            self.set_font('Arial', 'B', 15)
+                            self.cell(0, 10, 'Robot Vacuum Depot - Analytics Report', 0, 1, 'C')
+                            self.ln(10)
+
+                        def footer(self):
+                            self.set_y(-15)
+                            self.set_font('Arial', 'I', 8)
+                            self.cell(0, 10, f'Page {self.page_no()}', 0, 0, 'C')
+
+                    pdf = PDF()
+                    pdf.set_auto_page_break(auto=True, margin=15)
+
+                    # Helper to sanitize text for latin-1 encoding
+                    def sanitize_text(text):
+                        if not isinstance(text, str):
+                            text = str(text)
+                        # Replace common unicode chars that cause issues
+                        replacements = {
+                            '\u2011': '-',  # non-breaking hyphen
+                            '\u2013': '-',  # en dash
+                            '\u2014': '-',  # em dash
+                            '\u2018': "'",  # left single quote
+                            '\u2019': "'",  # right single quote
+                            '\u201c': '"',  # left double quote
+                            '\u201d': '"',  # right double quote
+                            '\u2026': '...', # ellipsis
+                            '\u00a0': ' ',  # non-breaking space
+                        }
+                        for char, replacement in replacements.items():
+                            text = text.replace(char, replacement)
+                        # Encode to latin-1 with replace for any remaining issues
+                        return text.encode('latin-1', errors='replace').decode('latin-1')
+
+                    pdf_indices = st.session_state.pdf_selected_indices
+                    for idx in pdf_indices:
+                        q = saved_queries[idx]
+                        pdf.add_page()
+
+                        # Title
+                        pdf.set_font('Arial', 'B', 14)
+                        pdf.multi_cell(0, 10, sanitize_text(f"Query: {q['query_text']}"))
+                        pdf.ln(5)
+
+                        # Meta info
+                        pdf.set_font('Arial', '', 10)
+                        pdf.cell(0, 10, sanitize_text(f"Date: {q.get('saved_at', 'Unknown')[:16]} | Type: {q.get('chart_type', 'table')}"), 0, 1)
+                        pdf.ln(5)
+
+                        # SQL
+                        pdf.set_font('Courier', '', 8)
+                        pdf.set_fill_color(240, 240, 240)
+                        pdf.multi_cell(0, 5, sanitize_text(f"SQL: {q['sql_query']}"), 1, 'L', True)
+                        pdf.ln(10)
+                        
+                        # Data/Chart
+                        if q.get('result_data'):
+                            df = pd.DataFrame(q['result_data'])
+                            
+                            # Try to render chart image
+                            chart_type = q.get('chart_type', 'table')
+                            if chart_type != 'table':
+                                try:
+                                    chart = ChartRenderer.render_chart(df, chart_type, q['query_text'])
+                                    if chart:
+                                        # Save chart to temp file
+                                        with tempfile.NamedTemporaryFile(suffix=".png", delete=False) as tmp_file:
+                                            # Update layout for static export
+                                            chart.update_layout(width=800, height=400, title_font_size=20)
+                                            pio.write_image(chart, tmp_file.name, format="png")
+                                            
+                                            # Add to PDF
+                                            pdf.image(tmp_file.name, x=10, w=190)
+                                            pdf.ln(10)
+                                            
+                                            # Cleanup
+                                            try:
+                                                os.remove(tmp_file.name)
+                                            except:
+                                                pass
+                                except Exception as e:
+                                    pdf.set_text_color(255, 0, 0)
+                                    pdf.cell(0, 10, f"Could not render chart image: {str(e)}", 0, 1)
+                                    pdf.set_text_color(0, 0, 0)
+                            
+                            # Data Table (Top 20 rows)
+                            pdf.set_font('Arial', 'B', 12)
+                            pdf.cell(0, 10, 'Data Preview (Top 20 rows)', 0, 1)
+                            pdf.set_font('Arial', '', 8)
+                            
+                            # Simple table renderer
+                            col_width = 190 / len(df.columns) if len(df.columns) > 0 else 190
+                            col_width = max(col_width, 20) # Min width
+                            col_width = min(col_width, 50) # Max width
+                            
+                            # Header
+                            for col in df.columns:
+                                pdf.cell(col_width, 7, sanitize_text(str(col)[:15]), 1)
+                            pdf.ln()
+
+                            # Rows
+                            for _, row in df.head(20).iterrows():
+                                for col in df.columns:
+                                    pdf.cell(col_width, 6, sanitize_text(str(row[col])[:20]), 1)
+                                pdf.ln()
+                                
+                    # Output
+                    pdf_bytes = pdf.output(dest='S').encode('latin-1')
+                    
+                    st.success(f"Report generated successfully! ({len(pdf_indices)} queries)")
+                    # Use a unique key based on selected indices to prevent caching issues
+                    download_key = f"pdf_download_{'_'.join(map(str, pdf_indices))}"
+                    st.download_button(
+                        label="📥 Download PDF Report",
+                        data=pdf_bytes,
+                        file_name="analytics_report.pdf",
+                        mime="application/pdf",
+                        key=download_key
+                    )
+                    # Clear the pending indices after showing download
+                    st.session_state.pdf_selected_indices = None
+                    
+                except Exception as e:
+                    st.error(f"Failed to generate PDF: {str(e)}")
+                    st.info("Ensure 'kaleido' is installed for chart image generation.")
+
+    else:
+        st.info("Select queries above to generate a PDF report.")
+
+    st.stop()
+
 # ==================== CHAT UI ====================
 with title_row[2]:
     def clear_conversation():
@@ -500,6 +766,9 @@ with title_row[2]:
             if key in st.session_state:
                 del st.session_state[key]
     st.button("Restart", icon=":material/refresh:", on_click=clear_conversation)
+
+    # Scroll to top button
+    st.markdown('<a href="#" class="scroll-to-top" onclick="window.scrollTo({top: 0, behavior: \'smooth\'}); return false;">⬆</a>', unsafe_allow_html=True)
 
 # Check if user just submitted initial question or clicked suggestion
 user_just_asked_initial_question = (
@@ -570,7 +839,8 @@ for i, message in enumerate(st.session_state.messages):
                     data = message["data"]
 
                     if current_chart != 'table':
-                        chart = ChartRenderer.render_chart(data, current_chart)
+                        query_text = message["content"] if message["role"] == "user" else st.session_state.messages[i-1]["content"]
+                        chart = ChartRenderer.render_chart(data, current_chart, query_text)
                         if chart:
                             st.plotly_chart(chart, use_container_width=True, key=f"plotly_{i}")
                         else:
@@ -594,6 +864,21 @@ for i, message in enumerate(st.session_state.messages):
                         use_container_width=True,
                         key=f"download_{i}"
                     )
+
+                    query_text = message["content"] if message["role"] == "user" else st.session_state.messages[i-1]["content"]
+                    is_saved = metrics_tracker.is_query_saved(query_text)
+                    
+                    if is_saved:
+                        st.button("✅ Saved", key=f"chat_saved_{i}", disabled=True, use_container_width=True)
+                    else:
+                        if st.button("⭐ Save", key=f"chat_save_{i}", use_container_width=True):
+                            metrics_tracker.save_query({
+                                'query_text': query_text,
+                                'sql_query': message.get("sql_query"),
+                                'chart_type': current_chart,
+                                'result_data': data.to_dict('records')
+                            })
+                            st.rerun()
 
                 # SQL Details
                 with st.expander("🔍 Generated SQL"):
@@ -676,3 +961,5 @@ if user_message:
                     "content": error_msg,
                     "data": None
                 })
+
+

@@ -24,7 +24,7 @@
 1.  **Clone & Setup**
     ```bash
     cd src
-    pip install -r requirements.txt
+    pip3 install -r requirements.txt
     ```
 
 2.  **Configure Environment**
@@ -46,6 +46,8 @@
     ```bash
     cd src
     streamlit run app.py
+    or
+    python3 -m streamlit run app.py
     ```
 
 ## 📂 Project Structure
@@ -68,4 +70,28 @@ Try these in the chat interface:
 
 ## 📚 Documentation
 
-For a deep dive into the architecture and data flow, check out [PROJECT_DETAILS.md](../PROJECT_DETAILS.md).
+For a deep dive into the architecture and data flow, check out [PROJECT_DETAILS.md](PROJECT_DETAILS.md).
+
+---
+
+## 📋 Changelog
+
+### v2.0.0 (Latest)
+
+**New Features**
+- **RAG Layer**: Added Retrieval Augmented Generation (`RAGLayer.py`) for enhanced SQL generation with semantic search, few-shot learning examples, and business context injection
+- **Saved Queries Mode**: New UI mode to save, view, and manage favorite queries with grid layout
+- **PDF Export**: Export selected saved queries to PDF reports
+- **Chart Highlighting**: Bar charts now highlight maximum values when queries contain keywords like "highest", "top", "best"
+
+**Improvements**
+- Enhanced error handling throughout SQLAgent (parse_question, generate_sql, validate_sql, format_results)
+- Improved Analytics dashboard layout with better timing displays
+- Added save/star functionality to History and Dashboard modes
+- Better chart rendering with query-aware context
+
+**Technical Changes**
+- Removed `data_processing/` directory (consolidated functionality)
+- Added `.env.example` template for easier setup
+- Updated requirements with new RAG dependencies (OpenAI embeddings, numpy)
+- Persistent saved queries via `saved_queries.json`

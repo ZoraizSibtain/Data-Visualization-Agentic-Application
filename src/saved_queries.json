@@ -1,0 +1,225 @@
+[
+  {
+    "query_text": "Which warehouses are currently below their restock threshold based on stock level and capacity?",
+    "sql_query": "SELECT w.\"WarehouseID\", w.\"WarehouseStreetAddress\", wps.\"StockLevel\"\nFROM \"robot_vacuum_depot\".\"Warehouse\" w\nJOIN \"robot_vacuum_depot\".\"WarehouseProductStock\" wps ON w.\"WarehouseID\" = wps.\"WarehouseID\"\nWHERE wps.\"StockLevel\" < wps.\"RestockThreshold\"\nORDER BY wps.\"StockLevel\" ASC\nLIMIT 15",
+    "chart_type": "bar",
+    "result_data": [
+      {
+        "0": "WH-N1",
+        "1": "1060 W Addison St, Chicago, IL",
+        "2": 0
+      },
+      {
+        "0": "WH-N2",
+        "1": "2001 N Clark St, Chicago, IL",
+        "2": 0
+      },
+      {
+        "0": "WH-N2",
+        "1": "2001 N Clark St, Chicago, IL",
+        "2": 0
+      },
+      {
+        "0": "WH-N2",
+        "1": "2001 N Clark St, Chicago, IL",
+        "2": 0
+      },
+      {
+        "0": "WH-S2",
+        "1": "4701 S Ashland Ave, Chicago, IL",
+        "2": 0
+      },
+      {
+        "0": "WH-S1",
+        "1": "7000 S State St, Chicago, IL",
+        "2": 0
+      },
+      {
+        "0": "WH-S2",
+        "1": "4701 S Ashland Ave, Chicago, IL",
+        "2": 51
+      },
+      {
+        "0": "WH-S1",
+        "1": "7000 S State St, Chicago, IL",
+        "2": 56
+      },
+      {
+        "0": "WH-S2",
+        "1": "4701 S Ashland Ave, Chicago, IL",
+        "2": 56
+      },
+      {
+        "0": "WH-N1",
+        "1": "1060 W Addison St, Chicago, IL",
+        "2": 57
+      },
+      {
+        "0": "WH-N1",
+        "1": "1060 W Addison St, Chicago, IL",
+        "2": 57
+      },
+      {
+        "0": "WH-S2",
+        "1": "4701 S Ashland Ave, Chicago, IL",
+        "2": 57
+      },
+      {
+        "0": "WH-S1",
+        "1": "7000 S State St, Chicago, IL",
+        "2": 58
+      },
+      {
+        "0": "WH-S1",
+        "1": "7000 S State St, Chicago, IL",
+        "2": 58
+      },
+      {
+        "0": "WH-N1",
+        "1": "1060 W Addison St, Chicago, IL",
+        "2": 63
+      }
+    ],
+    "saved_at": "2025-11-20T17:11:50.612902"
+  },
+  {
+    "query_text": "Which robot vacuum models have the highest number of delayed deliveries across all Chicago ZIP codes?",
+    "sql_query": "SELECT pr.\"ModelNumber\", COUNT(o.\"OrderID\") as delayed_deliveries\nFROM \"robot_vacuum_depot\".\"Order\" o\nJOIN \"robot_vacuum_depot\".\"Product\" pr ON o.\"ProductID\" = pr.\"ProductID\"\nWHERE o.\"DeliveryStatus\" = 'Delayed' AND o.\"DeliveryZipCode\" LIKE '606%'\nGROUP BY pr.\"ModelNumber\"\nORDER BY delayed_deliveries DESC\nLIMIT 15",
+    "chart_type": "bar",
+    "result_data": [
+      {
+        "0": "V3s Pro",
+        "1": 69
+      },
+      {
+        "0": "j7",
+        "1": 68
+      },
+      {
+        "0": "Matrix XL",
+        "1": 42
+      },
+      {
+        "0": "Q8 Max",
+        "1": 35
+      },
+      {
+        "0": "X1 Omni",
+        "1": 30
+      },
+      {
+        "0": "N8",
+        "1": 28
+      },
+      {
+        "0": "L10s Ultra",
+        "1": 28
+      },
+      {
+        "0": "s9+",
+        "1": 27
+      },
+      {
+        "0": "D8",
+        "1": 26
+      },
+      {
+        "0": "S5 Max",
+        "1": 21
+      },
+      {
+        "0": "IQ 2\u2011in\u20111 XL",
+        "1": 20
+      },
+      {
+        "0": "L10 Pro",
+        "1": 20
+      },
+      {
+        "0": "X30 Ultra",
+        "1": 19
+      },
+      {
+        "0": "AV2501AE",
+        "1": 19
+      },
+      {
+        "0": "360 Vis Nav",
+        "1": 19
+      }
+    ],
+    "saved_at": "2025-11-20T18:29:33.228509"
+  },
+  {
+    "query_text": "Among all manufacturers, who has the best average review rating for their products?",
+    "sql_query": "SELECT m.\"ManufacturerName\", AVG(r.\"ProductRating\") as average_rating\nFROM \"robot_vacuum_depot\".\"Manufacturer\" m\nJOIN \"robot_vacuum_depot\".\"Product\" p ON m.\"ManufacturerID\" = p.\"ManufacturerID\"\nJOIN \"robot_vacuum_depot\".\"Review\" r ON p.\"ProductID\" = r.\"ProductID\"\nGROUP BY m.\"ManufacturerName\"\nORDER BY average_rating DESC\nLIMIT 15",
+    "chart_type": "bar",
+    "result_data": [
+      {
+        "0": "Narwal Robotics",
+        "1": "3.5538752362948960"
+      },
+      {
+        "0": "Roborock",
+        "1": "3.5336538461538462"
+      },
+      {
+        "0": "Anker Innovations",
+        "1": "3.4527027027027027"
+      },
+      {
+        "0": "iRobot Corp.",
+        "1": "3.4136690647482014"
+      },
+      {
+        "0": "Ecovacs Robotics",
+        "1": "3.3775933609958506"
+      },
+      {
+        "0": "Dyson Ltd.",
+        "1": "3.3686006825938567"
+      },
+      {
+        "0": "SharkNinja",
+        "1": "3.3076923076923077"
+      }
+    ],
+    "saved_at": "2025-11-20T18:29:58.362142"
+  },
+  {
+    "query_text": "Plot the average review rating per manufacturer to analyze product satisfaction by brand.",
+    "sql_query": "SELECT m.\"ManufacturerName\",\n       ROUND(AVG(r.\"ProductRating\")::numeric, 2) as avg_rating\nFROM \"robot_vacuum_depot\".\"Manufacturer\" m\nJOIN \"robot_vacuum_depot\".\"Product\" p ON m.\"ManufacturerID\" = p.\"ManufacturerID\"\nJOIN \"robot_vacuum_depot\".\"Review\" r ON p.\"ProductID\" = r.\"ProductID\"\nGROUP BY m.\"ManufacturerName\"\nHAVING COUNT(r.\"ReviewID\") >= 5\nORDER BY avg_rating DESC\nLIMIT 15",
+    "chart_type": "bar",
+    "result_data": [
+      {
+        "0": "Narwal Robotics",
+        "1": "3.55"
+      },
+      {
+        "0": "Roborock",
+        "1": "3.53"
+      },
+      {
+        "0": "Anker Innovations",
+        "1": "3.45"
+      },
+      {
+        "0": "iRobot Corp.",
+        "1": "3.41"
+      },
+      {
+        "0": "Ecovacs Robotics",
+        "1": "3.38"
+      },
+      {
+        "0": "Dyson Ltd.",
+        "1": "3.37"
+      },
+      {
+        "0": "SharkNinja",
+        "1": "3.31"
+      }
+    ],
+    "saved_at": "2025-11-20T18:53:39.568793"
+  }
+]
