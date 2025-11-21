@@ -13,21 +13,23 @@ class WorkflowManager:
     def create_workflow(self) -> StateGraph:
         """Create and configure the workflow graph.
 
-        Optimized workflow:
+        Workflow with validation:
         - Removed get_unique_nouns (expensive DB queries)
-        - Removed validate_and_fix_sql (redundant with good prompts)
+        - Re-enabled validate_and_fix_sql for SQL safety
         - Combined format_results + choose_visualization into one call
         """
         workflow = StateGraph(AgentState, input=InputState, output=OutputState)
 
-        # Add nodes to the graph (optimized - fewer LLM calls)
+        # Add nodes to the graph
         workflow.add_node("generate_sql", self.sql_agent.generate_sql_direct)
+        workflow.add_node("validate_sql", self.sql_agent.validate_and_fix_sql)
         workflow.add_node("execute_sql", self.sql_agent.execute_sql)
         workflow.add_node("format_and_visualize", self.sql_agent.format_and_visualize)
         workflow.add_node("format_data_for_visualization", self.data_formatter.format_data_for_visualization)
 
-        # Define edges (simplified flow)
-        workflow.add_edge("generate_sql", "execute_sql")
+        # Define edges (with validation step)
+        workflow.add_edge("generate_sql", "validate_sql")
+        workflow.add_edge("validate_sql", "execute_sql")
         workflow.add_edge("execute_sql", "format_and_visualize")
         workflow.add_edge("format_and_visualize", "format_data_for_visualization")
         workflow.add_edge("format_data_for_visualization", END)
@@ -49,13 +51,19 @@ class WorkflowManager:
         state.update(sql_result)
         metrics_tracker.record_step(uuid, 'sql_gen', time.time() - start)
 
-        # Step 2: Execute SQL
+        # Step 2: Validate SQL
+        start = time.time()
+        validate_result = self.sql_agent.validate_and_fix_sql(state)
+        state.update(validate_result)
+        metrics_tracker.record_step(uuid, 'validation', time.time() - start)
+
+        # Step 3: Execute SQL
         start = time.time()
         exec_result = self.sql_agent.execute_sql(state)
         state.update(exec_result)
         metrics_tracker.record_step(uuid, 'execution', time.time() - start)
 
-        # Step 3: Format and Visualize
+        # Step 4: Format and Visualize
         start = time.time()
         format_result = self.sql_agent.format_and_visualize(state)
         state.update(format_result)

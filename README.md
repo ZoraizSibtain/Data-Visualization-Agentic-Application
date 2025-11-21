@@ -15,7 +15,7 @@
 ## 🚀 Quick Start
 
 ### Prerequisites
-- Python 3.9+
+- Python 3.11+
 - PostgreSQL
 - OpenAI API Key
 
@@ -33,13 +33,9 @@
     # Edit .env with your OPENAI_API_KEY and DB credentials
     ```
 
-3.  **Initialize Database** (using Go)
+3.  **Initialize Database**
     ```bash
-    cd src/go
-    go mod init robotvacuum
-    go get github.com/lib/pq
-    go run create_schema.go
-    go run ingest_masterdata.go
+    python3 setup.py
     ```
 
 4.  **Run the App**
@@ -58,7 +54,9 @@
 | `src/agentic_processor/` | Orchestrates the query flow and caching logic. |
 | `src/my_agent/` | Core LangGraph agent definitions (SQL generation, execution). |
 | `src/visualization/` | Plotly-based chart rendering engine. |
-| `src/go/` | High-performance database initialization scripts. |
+| `src/backend/` | Stores persistent data (saved queries, test results). |
+| `src/database_setup.py` | Database initialization and ETL pipeline. |
+| `src/setup.py` | Project setup and dependency installation script. |
 
 ## 💡 Example Queries
 
@@ -70,7 +68,7 @@ Try these in the chat interface:
 
 ## 📚 Documentation
 
-For a deep dive into the architecture and data flow, check out [PROJECT_DETAILS.md](PROJECT_DETAILS.md).
+For a deep dive into the architecture and data flow, check out [CODE_ARCHITECTURE.md](CODE_ARCHITECTURE.md).
 
 ---
 
@@ -95,3 +93,31 @@ For a deep dive into the architecture and data flow, check out [PROJECT_DETAILS.
 - Added `.env.example` template for easier setup
 - Updated requirements with new RAG dependencies (OpenAI embeddings, numpy)
 - Persistent saved queries via `saved_queries.json`
+
+---
+
+## 🔧 Troubleshooting
+
+### Common Issues
+
+**1. "Database not found" or Connection Errors**
+- Ensure PostgreSQL is running.
+- Check your `.env` file credentials (`POSTGRES_USER`, `POSTGRES_PASSWORD`, etc.).
+- Run `python3 src/setup.py` again to rebuild the schema.
+
+**2. "OpenAI API Key missing"**
+- Make sure you have created a `.env` file from `.env.example`.
+- Verify your API key is valid and has access to `gpt-4o-mini`.
+
+**3. `pip install` fails**
+- Ensure you are using Python 3.9 or higher.
+- Try upgrading pip: `pip install --upgrade pip`.
+
+**4. Charts not displaying**
+- Ensure `kaleido` is installed (included in requirements) for static image generation.
+- Check if the query returned data (look for "Rows: 0" in the UI).
+
+### Resetting the Environment
+If you need to start fresh:
+1. Drop the `robot_vacuum_depot` schema in your database tool.
+2. Run `python3 src/setup.py`.

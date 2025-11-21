@@ -19,7 +19,23 @@ st.set_page_config(
 from assets.styles import CUSTOM_CSS
 
 # Hide Streamlit navbar and footer, make header sticky
+# Hide Streamlit navbar and footer, make header sticky
 st.markdown(CUSTOM_CSS, unsafe_allow_html=True)
+
+# Check DB Connection
+from my_agent.DatabaseManager import DatabaseManager
+try:
+    db = DatabaseManager()
+    # Simple check to see if schema exists
+    with db.engine.connect() as conn:
+        from sqlalchemy import text
+        result = conn.execute(text("SELECT schema_name FROM information_schema.schemata WHERE schema_name = 'robot_vacuum_depot';"))
+        if not result.fetchone():
+            st.error("⚠️ Database schema not found! Please run `python3 src/setup.py` to initialize the database.")
+            st.stop()
+except Exception as e:
+    st.error(f"⚠️ Database connection failed: {str(e)}")
+    st.stop()
 
 # Initialize session state
 if 'query_history' not in st.session_state:
@@ -136,7 +152,7 @@ if st.session_state.ui_mode == 'analytics':
 
     # Load test results if available
     test_results = None
-    test_results_file = 'test_results.json'
+    test_results_file = os.path.join('backend', 'test_results.json')
     if os.path.exists(test_results_file):
         try:
             with open(test_results_file, 'r') as f:

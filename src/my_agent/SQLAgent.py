@@ -153,12 +153,54 @@ Generate SQL query string'''),
             return {"sql_query": "NOT_RELEVANT", "error": str(e)}
 
     def validate_and_fix_sql(self, state: dict) -> dict:
-        """Validate and fix the generated SQL query."""
+        """Validate and fix the generated SQL query using lightweight checks first."""
         sql_query = state['sql_query']
 
         if sql_query == "NOT_RELEVANT":
             return {"sql_query": "NOT_RELEVANT", "sql_valid": False}
-        
+
+        # Lightweight validation - check for common issues without LLM
+        import re
+
+        # Check for dangerous operations
+        dangerous_patterns = [
+            r'\bDROP\b', r'\bDELETE\b', r'\bTRUNCATE\b', r'\bALTER\b',
+            r'\bINSERT\b', r'\bUPDATE\b', r'\bCREATE\b'
+        ]
+        for pattern in dangerous_patterns:
+            if re.search(pattern, sql_query, re.IGNORECASE):
+                return {"sql_query": "NOT_RELEVANT", "sql_valid": False,
+                        "sql_issues": f"Dangerous operation detected: {pattern}"}
+
+        # Check basic SQL structure
+        if not re.search(r'\bSELECT\b', sql_query, re.IGNORECASE):
+            return {"sql_query": "NOT_RELEVANT", "sql_valid": False,
+                    "sql_issues": "Missing SELECT statement"}
+
+        # Check for proper quoting of schema.table (common issue)
+        # Fix unquoted schema.table patterns
+        fixed_query = sql_query
+
+        # Pattern: robot_vacuum_depot.TableName -> "robot_vacuum_depot"."TableName"
+        unquoted_pattern = r'\brobot_vacuum_depot\.(\w+)\b'
+        if re.search(unquoted_pattern, fixed_query):
+            fixed_query = re.sub(unquoted_pattern, r'"robot_vacuum_depot"."\1"', fixed_query)
+
+        # If query was modified, return fixed version
+        if fixed_query != sql_query:
+            return {"sql_query": fixed_query, "sql_valid": True,
+                    "sql_issues": "Fixed table quoting"}
+
+        # Query passes lightweight validation
+        return {"sql_query": sql_query, "sql_valid": True}
+
+    def validate_and_fix_sql_llm(self, state: dict) -> dict:
+        """Validate and fix the generated SQL query using LLM (slower but more thorough)."""
+        sql_query = state['sql_query']
+
+        if sql_query == "NOT_RELEVANT":
+            return {"sql_query": "NOT_RELEVANT", "sql_valid": False}
+
         schema = self.db_manager.get_schema(state['uuid'])
 
         prompt = ChatPromptTemplate.from_messages([
@@ -364,7 +406,8 @@ IMPORTANT RULES:
 6. CRITICAL: When selecting columns from multiple tables, you MUST include proper JOINs
 7. Use table aliases for clarity (e.g., o for Order, p for Product)
 8. For aggregations (pie charts, bar charts, rankings), add LIMIT 15
-9. If the question is not relevant to the schema, respond with exactly: NOT_RELEVANT'''
+9. ALWAYS generate SQL if the question relates to: orders, products, customers, deliveries, carriers (USPS, UPS, FedEx), zip codes, warehouses, reviews, manufacturers, shipping, or revenue
+10. Only respond with NOT_RELEVANT for completely unrelated topics (weather, news, sports, personal questions)'''
 
         if rag_context:
             system_prompt += f"\n\nBusiness Context:\n{rag_context}"

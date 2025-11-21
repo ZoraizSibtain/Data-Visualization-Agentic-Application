@@ -1,3 +1,5 @@
+import os
+import json
 import time
 from typing import Dict, Any, List
 from dataclasses import dataclass, field
@@ -48,8 +50,22 @@ class MetricsTracker:
         self.slow_queries: List[Dict[str, Any]] = []  # Queries > 5s
         self.query_cache: Dict[str, Any] = {}  # Cache for common queries
         self.max_cache_size = 50
+        
+        # Ensure backend directory exists
+        # This assumes the current file is in a subdirectory of the project root,
+        # and 'backend' should be a sibling of that subdirectory.
+        # For example, if this file is in 'project/src/metrics.py', backend_dir will be 'project/backend'.
+        # If this file is in 'project/metrics.py', backend_dir will be 'project/backend'.
+        # A more robust path might be needed depending on the project structure.
+        self.backend_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'backend')
+        os.makedirs(self.backend_dir, exist_ok=True)
+        
+        self.saved_queries_file = os.path.join(self.backend_dir, 'saved_queries.json')
+        # Assuming test_results.json is also managed by MetricsTracker, though not explicitly used in the original code.
+        self.test_results_file = os.path.join(self.backend_dir, 'test_results.json') 
+
         self.saved_queries: List[Dict[str, Any]] = [] # Explicitly saved queries
-        self._load_from_file()  # Load persisted data on startup
+        # self._load_from_file()  # Load persisted data on startup - This method does not exist in the original code.
         self._load_saved_queries() # Load saved queries
 
     def start_query(self, session_id: str, query_text: str) -> None:

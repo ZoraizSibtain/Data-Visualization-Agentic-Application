@@ -38,19 +38,20 @@ class RAGLayer:
         """Load curated query examples for few-shot learning."""
         return [
             {
-                "question": "Which robot vacuum models have the highest number of delayed deliveries?",
+                "question": "Which robot vacuum models have the highest number of delayed deliveries across all Chicago ZIP codes?",
                 "sql": '''SELECT p."ProductName", COUNT(*) as delayed_count
                     FROM "robot_vacuum_depot"."Order" o
                     JOIN "robot_vacuum_depot"."Product" p ON o."ProductID" = p."ProductID"
                     WHERE o."DeliveryStatus" = 'Delayed'
+                    AND o."DeliveryZipCode" LIKE '606%'
                     GROUP BY p."ProductName"
                     ORDER BY delayed_count DESC
                     LIMIT 10''',
-                "context": "Delivery analysis - joins Order and Product tables"
+                "context": "Delivery analysis - Chicago ZIP codes start with 606, joins Order and Product tables"
             },
             {
                 "question": "Which warehouses are below their restock threshold?",
-                "sql": '''SELECT w."WarehouseName", wps."StockLevel", wps."RestockThreshold"
+                "sql": '''SELECT w."WarehouseID", w."WarehouseZipCode", wps."StockLevel", wps."RestockThreshold"
                     FROM "robot_vacuum_depot"."Warehouse" w
                     JOIN "robot_vacuum_depot"."WarehouseProductStock" wps ON w."WarehouseID" = wps."WarehouseID"
                     WHERE wps."StockLevel" < wps."RestockThreshold"
