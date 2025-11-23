@@ -1,3 +1,4 @@
+import polars as pl
 import pandas as pd
 from sqlalchemy import create_engine, inspect
 import sys
@@ -9,7 +10,7 @@ from config import DATABASE_URL
 
 def ingest_csv(csv_path: str, table_name: str = None, database_url: str = None) -> str:
     """
-    Ingest a CSV file directly into the database as a single table.
+    Ingest a CSV file directly into the database as a single table using Polars.
 
     Args:
         csv_path: Path to the CSV file
@@ -22,23 +23,27 @@ def ingest_csv(csv_path: str, table_name: str = None, database_url: str = None) 
     database_url = database_url or DATABASE_URL
     engine = create_engine(database_url)
 
-    # Read CSV
-    df = pd.read_csv(csv_path)
+    # Read CSV with Polars
+    df = pl.read_csv(csv_path, ignore_errors=True)
 
     # Clean column names
-    df.columns = (df.columns
-                  .str.strip()
-                  .str.lower()
-                  .str.replace(' ', '_')
-                  .str.replace('[^a-z0-9_]', '', regex=True))
+    new_columns = (
+        pd.Series(df.columns)
+        .str.strip()
+        .str.lower()
+        .str.replace(' ', '_')
+        .str.replace('[^a-z0-9_]', '', regex=True)
+        .tolist()
+    )
+    df.columns = new_columns
 
     # Generate table name if not provided
     if table_name is None:
         table_name = os.path.splitext(os.path.basename(csv_path))[0]
         table_name = table_name.lower().replace(' ', '_').replace('-', '_')
 
-    # Load to database
-    df.to_sql(table_name, engine, if_exists='replace', index=False)
+    # Load to database (convert to pandas for SQLAlchemy compatibility)
+    df.to_pandas().to_sql(table_name, engine, if_exists='replace', index=False)
 
     return table_name
 

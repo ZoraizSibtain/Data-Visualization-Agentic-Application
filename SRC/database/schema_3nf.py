@@ -128,3 +128,13 @@ class Review(Base):
     rating = Column(Integer)
     review_text = Column(Text)
     review_date = Column(DateTime, default=datetime.utcnow)
+    
+    
+class DatasetVersion(Base):
+    __tablename__ = 'dataset_version'
+    
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    filename = Column(String(200))
+    upload_date = Column(DateTime, default=datetime.utcnow)
+    row_count = Column(Integer)
+    description = Column(String(200))

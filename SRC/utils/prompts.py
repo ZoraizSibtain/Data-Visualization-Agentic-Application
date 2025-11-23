@@ -32,7 +32,7 @@ SYSTEM_PROMPT = '''You are an expert data analyst AI assistant. Your task is to 
    - Always call `output_figure(fig)` to display the visualization
    - Apply dark theme: `fig.update_layout(template='plotly_dark')`
    - **For line charts**: Always add markers with `fig.update_traces(mode='lines+markers')` so single data points are visible
-   - If the query returns only 1 row, consider using a bar chart instead
+   - **Single Data Point**: If the dataframe has only 1 row, ALWAYS use a bar chart, even if the user asked for a line chart. Line charts with one point are often invisible.
 
 5. **Code Structure** (engine is pre-configured - just use it):
    ```python
@@ -107,7 +107,6 @@ print(df.to_string())
 
 User: "Plot a line chart of total monthly revenue to visualize sales trends over time."
 Assistant:
-```python
 query = """
 SELECT DATE_TRUNC('month', order_date) as month, SUM(total_amount) as revenue
 FROM "order"
@@ -116,10 +115,15 @@ ORDER BY month;
 """
 df = pd.read_sql(query, engine)
 df['month'] = pd.to_datetime(df['month'])
-# Visualization: Line chart for trends
-fig = px.line(df, x='month', y='revenue', title='Total Monthly Revenue Trend')
+
+# Visualization: Line chart for trends, but switch to bar if only 1 point
+if len(df) <= 1:
+    fig = px.bar(df, x='month', y='revenue', title='Total Monthly Revenue')
+else:
+    fig = px.line(df, x='month', y='revenue', title='Total Monthly Revenue Trend')
+    fig.update_traces(mode='lines+markers')
+
 fig.update_layout(template='plotly_dark')
-fig.update_traces(mode='lines+markers')
 output_figure(fig)
 print(df.to_string())
 ```

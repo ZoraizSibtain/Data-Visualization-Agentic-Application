@@ -13,6 +13,7 @@ from config import LLM_MODEL, LLM_TEMPERATURE, MAX_ITERATIONS
 from .python_repl_tool import SafePythonREPL
 from utils.prompts import SYSTEM_PROMPT, ERROR_RECOVERY_PROMPT, FEW_SHOT_EXAMPLES
 from utils.sql_extractor import extract_sql_from_code
+from utils.sql_validator import validate_sql
 
 
 class AgentState(TypedDict):
@@ -86,6 +87,13 @@ class WorkflowManager:
     def _execute_code(self, state: AgentState) -> AgentState:
         """Execute the generated code."""
         try:
+            # Validate SQL before execution
+            sql_query = extract_sql_from_code(state["code"])
+            if sql_query:
+                is_valid, error_msg = validate_sql(sql_query)
+                if not is_valid:
+                    raise ValueError(f"Security Violation: {error_msg}")
+
             result = self.repl.run(state["code"])
 
             # Debug: print result to console

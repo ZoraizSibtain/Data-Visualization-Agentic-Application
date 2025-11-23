@@ -84,7 +84,7 @@ else:
         with col1:
             # Checkbox for selection
             is_selected = query['id'] in st.session_state.selected_queries
-            if st.checkbox("", value=is_selected, key=f"select_{query['id']}"):
+            if st.checkbox("Select", value=is_selected, key=f"select_{query['id']}", label_visibility="collapsed"):
                 st.session_state.selected_queries.add(query['id'])
             else:
                 st.session_state.selected_queries.discard(query['id'])
