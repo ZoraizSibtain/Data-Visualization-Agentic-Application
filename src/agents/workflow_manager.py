@@ -1,18 +1,21 @@
-"""
-Workflow Manager - Orchestrates multi-agent workflow for data analysis
-"""
-from typing import TypedDict, List, Optional, Any
+from typing import TypedDict, Optional, List
 from langchain_openai import ChatOpenAI
-from langchain.schema import HumanMessage, AIMessage, SystemMessage
-from agents.python_repl_tool import SafePythonREPL
-from utils.prompts import SYSTEM_PROMPT, CODE_GENERATION_PROMPT, ERROR_RECOVERY_PROMPT
-import config
-import json
+from langchain_core.messages import HumanMessage, AIMessage, SystemMessage
+from langgraph.graph import StateGraph, END
+import time
 import re
+import json
+import sys
+import os
+
+sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+from config import LLM_MODEL, LLM_TEMPERATURE, MAX_ITERATIONS
+from .python_repl_tool import SafePythonREPL
+from utils.prompts import SYSTEM_PROMPT, ERROR_RECOVERY_PROMPT
+from utils.sql_extractor import extract_sql_from_code
 
 
 class AgentState(TypedDict):
-    """State for the agent workflow"""
     user_input: str
     messages: List
     schema: str
@@ -22,234 +25,208 @@ class AgentState(TypedDict):
     iterations: int
     error: Optional[str]
     final_response: str
+    execution_time: float
 
 
 class WorkflowManager:
-    """Manages the multi-agent workflow for data analysis"""
-    
-    def __init__(self, api_key: str, database_url: str, schema: str):
-        """
-        Initialize workflow manager
-        
-        Args:
-            api_key: OpenAI API key
-            database_url: Database connection URL
-            schema: Database schema description
-        """
-        self.api_key = api_key
-        self.database_url = database_url
-        self.schema = schema
-        
-        # Initialize LLM
+    def __init__(self, api_key: str, database_url: str = None):
         self.llm = ChatOpenAI(
-            api_key=api_key,
-            model=config.LLM_MODEL,
-            temperature=config.LLM_TEMPERATURE
+            model=LLM_MODEL,
+            temperature=LLM_TEMPERATURE,
+            api_key=api_key
         )
-        
-        # Initialize Python REPL
         self.repl = SafePythonREPL(database_url)
-    
-    def run_query(self, user_question: str) -> dict:
-        """
-        Process a user question through the workflow
-        
-        Args:
-            user_question: Natural language question from user
-            
-        Returns:
-            Dictionary with result, figure_json, sql_query, execution_time, and response
-        """
-        import time
-        from utils.sql_extractor import extract_sql_from_code
-        
-        start_time = time.time()
-        
-        state = AgentState(
-            user_input=user_question,
-            messages=[],
-            schema=self.schema,
-            code=None,
-            result=None,
-            figure_json=None,
-            iterations=0,
-            error=None,
-            final_response=""
+        self.workflow = self._create_workflow()
+
+    def _create_workflow(self):
+        """Create the LangGraph workflow."""
+        workflow = StateGraph(AgentState)
+
+        # Add nodes
+        workflow.add_node("generate_code", self._generate_code)
+        workflow.add_node("execute_code", self._execute_code)
+        workflow.add_node("fix_error", self._fix_error)
+        workflow.add_node("format_response", self._format_response)
+
+        # Set entry point
+        workflow.set_entry_point("generate_code")
+
+        # Add edges
+        workflow.add_edge("generate_code", "execute_code")
+        workflow.add_conditional_edges(
+            "execute_code",
+            self._should_retry,
+            {
+                "retry": "fix_error",
+                "success": "format_response",
+                "max_retries": "format_response"
+            }
         )
-        
-        # Step 1: Generate code to answer the question
-        state = self._generate_code(state)
-        
-        # Step 2: Execute code with retry logic
-        max_retries = config.MAX_ITERATIONS
-        while state['iterations'] < max_retries:
-            state = self._execute_code(state)
-            
-            if state['error'] is None:
-                # Success!
-                break
-            else:
-                # Try to fix the error
-                state = self._fix_error(state)
-                state['iterations'] += 1
-        
-        # Step 3: Format final response
-        state = self._format_response(state)
-        
-        # Calculate execution time
-        execution_time = time.time() - start_time
-        
-        # Extract SQL query from code
-        sql_query = extract_sql_from_code(state['code']) if state['code'] else None
-        
-        return {
-            'response': state['final_response'],
-            'figure_json': state['figure_json'],
-            'code': state['code'],
-            'sql_query': sql_query,
-            'execution_time': execution_time,
-            'error': state['error']
-        }
-    
+        workflow.add_edge("fix_error", "execute_code")
+        workflow.add_edge("format_response", END)
+
+        return workflow.compile()
+
     def _generate_code(self, state: AgentState) -> AgentState:
-        """Generate Python code to answer the user's question"""
-        
-        # Create prompt emphasizing visualization
-        prompt = f"""{SYSTEM_PROMPT}
+        """Generate Python code with SQL query and visualization."""
+        messages = [
+            SystemMessage(content=SYSTEM_PROMPT.format(schema=state["schema"])),
+            HumanMessage(content=state["user_input"])
+        ]
 
-User Question: {state['user_input']}
-
-Database Schema:
-{state['schema']}
-
-Generate Python code that:
-1. Retrieves the necessary data using SQL
-2. Creates an appropriate VISUALIZATION (chart/graph) using Plotly
-3. Stores the figure in a variable called 'fig'
-4. Converts the figure to JSON and stores in 'result_json' using: result_json = fig.to_json()
-
-IMPORTANT: 
-- ALWAYS create a visualization (bar, line, scatter, pie, etc.) unless the question explicitly asks for raw data
-- Use pd.read_sql() to execute SQL queries
-- Make the visualization interactive and informative
-- Include proper titles and labels
-
-Return ONLY the Python code, no explanations.
-"""
-        
-        messages = [HumanMessage(content=prompt)]
         response = self.llm.invoke(messages)
-        
-        # Extract code from response
         code = self._extract_code(response.content)
-        
-        state['code'] = code
-        state['messages'].append(('user', state['user_input']))
-        state['messages'].append(('assistant', f"Generated code:\n```python\n{code}\n```"))
-        
+
+        state["code"] = code
+        state["messages"].append(AIMessage(content=response.content))
+
         return state
-    
+
     def _execute_code(self, state: AgentState) -> AgentState:
-        """Execute the generated code"""
-        
-        if state['code'] is None:
-            state['error'] = "No code to execute"
-            return state
-        
+        """Execute the generated code."""
         try:
-            # Modify code to print result_json with a marker
-            modified_code = state['code'] + "\n\n# Print result for extraction\nif 'result_json' in dir():\n    print('<<<FIGURE_JSON_START>>>')\n    print(result_json)\n    print('<<<FIGURE_JSON_END>>>')"
-            
-            # Execute code
-            result = self.repl.run(modified_code)
-            
-            # Try to extract figure JSON from output
-            if '<<<FIGURE_JSON_START>>>' in result and '<<<FIGURE_JSON_END>>>' in result:
-                start_marker = '<<<FIGURE_JSON_START>>>'
-                end_marker = '<<<FIGURE_JSON_END>>>'
-                start_idx = result.find(start_marker) + len(start_marker)
-                end_idx = result.find(end_marker)
-                
-                if start_idx > 0 and end_idx > start_idx:
-                    json_str = result[start_idx:end_idx].strip()
-                    # Validate it's valid JSON
-                    try:
-                        json.loads(json_str)  # Test if valid JSON
-                        state['figure_json'] = json_str
-                    except:
-                        pass
-            
-            state['result'] = result
-            state['error'] = None
-            
+            result = self.repl.run(state["code"])
+
+            # Debug: print result to console
+            print(f"[DEBUG] REPL result length: {len(result) if result else 0}")
+            if result and '<<<FIGURE_JSON_START>>>' in result:
+                print("[DEBUG] Figure markers found in result")
+            else:
+                print(f"[DEBUG] No figure markers. Result preview: {result[:500] if result else 'empty'}")
+
+            # Extract figure JSON if present
+            figure_json = self._extract_figure_json(result)
+            if figure_json:
+                state["figure_json"] = figure_json
+                print(f"[DEBUG] Figure JSON extracted, length: {len(figure_json)}")
+                # Clean result of figure JSON markers
+                result = re.sub(
+                    r'<<<FIGURE_JSON_START>>>.*?<<<FIGURE_JSON_END>>>',
+                    '[Visualization generated]',
+                    result,
+                    flags=re.DOTALL
+                )
+            else:
+                print("[DEBUG] No figure JSON extracted")
+
+            state["result"] = result
+            state["error"] = None
+
         except Exception as e:
-            state['error'] = str(e)
-            state['result'] = None
-        
+            state["error"] = str(e)
+            state["iterations"] += 1
+            print(f"[DEBUG] Execution error: {e}")
+
         return state
-    
+
     def _fix_error(self, state: AgentState) -> AgentState:
-        """Attempt to fix code that produced an error"""
-        
-        prompt = ERROR_RECOVERY_PROMPT.format(
-            error=state['error'],
-            code=state['code']
+        """Fix code that produced an error."""
+        error_prompt = ERROR_RECOVERY_PROMPT.format(
+            code=state["code"],
+            error=state["error"],
+            schema=state["schema"]
         )
-        
-        messages = [HumanMessage(content=prompt)]
+
+        messages = [
+            SystemMessage(content=SYSTEM_PROMPT.format(schema=state["schema"])),
+            HumanMessage(content=state["user_input"]),
+            AIMessage(content=state["code"]),
+            HumanMessage(content=error_prompt)
+        ]
+
         response = self.llm.invoke(messages)
-        
-        # Extract fixed code
         code = self._extract_code(response.content)
-        state['code'] = code
-        
+
+        state["code"] = code
+        state["messages"].append(AIMessage(content=response.content))
+
         return state
-    
+
     def _format_response(self, state: AgentState) -> AgentState:
-        """Format the final response for the user"""
-        
-        if state['error']:
-            state['final_response'] = f"I encountered an error while processing your question: {state['error']}"
-        elif state['figure_json']:
-            state['final_response'] = "I've created a visualization to answer your question."
-        elif state['result']:
-            state['final_response'] = f"Here's what I found:\n\n{state['result']}"
+        """Format the final response for the user."""
+        if state["error"]:
+            state["final_response"] = f"I encountered an error after {state['iterations']} attempts:\n\n{state['error']}\n\nPlease try rephrasing your question."
         else:
-            state['final_response'] = "I processed your question but didn't generate any output."
-        
+            # Format result for display
+            result = state["result"] or ""
+
+            # Clean up the result
+            if "[Visualization generated]" in result:
+                state["final_response"] = "I've generated a visualization for your query."
+            elif result.strip():
+                state["final_response"] = result
+            else:
+                state["final_response"] = "Query executed successfully."
+
         return state
-    
-    def _extract_code(self, text: str) -> str:
-        """Extract Python code from LLM response"""
-        
-        # Try to find code in markdown code blocks
-        code_pattern = r'```python\n(.*?)```'
-        matches = re.findall(code_pattern, text, re.DOTALL)
-        
-        if matches:
-            return matches[0].strip()
-        
-        # Try without language specifier
-        code_pattern = r'```\n(.*?)```'
-        matches = re.findall(code_pattern, text, re.DOTALL)
-        
-        if matches:
-            return matches[0].strip()
-        
-        # If no code blocks, return the whole text
-        return text.strip()
 
+    def _should_retry(self, state: AgentState) -> str:
+        """Determine if we should retry after an error."""
+        if state["error"] is None:
+            return "success"
+        elif state["iterations"] >= MAX_ITERATIONS:
+            return "max_retries"
+        else:
+            return "retry"
 
-def create_workflow(api_key: str, database_url: str, schema: str) -> WorkflowManager:
-    """
-    Factory function to create a workflow manager
-    
-    Args:
-        api_key: OpenAI API key
-        database_url: Database connection URL
-        schema: Database schema description
-        
-    Returns:
-        Configured WorkflowManager instance
-    """
-    return WorkflowManager(api_key, database_url, schema)
+    def _extract_code(self, content: str) -> str:
+        """Extract Python code from LLM response."""
+        # Look for code blocks - use findall and take the first one only
+        code_matches = re.findall(r'```(?:python)?\s*(.*?)```', content, re.DOTALL)
+        if code_matches:
+            return code_matches[0].strip()
+
+        # If no code block, assume entire content is code
+        return content.strip()
+
+    def _extract_figure_json(self, result: str) -> Optional[str]:
+        """Extract Plotly figure JSON from execution result."""
+        match = re.search(
+            r'<<<FIGURE_JSON_START>>>\s*(.*?)\s*<<<FIGURE_JSON_END>>>',
+            result,
+            re.DOTALL
+        )
+        if match:
+            try:
+                # Validate JSON
+                json.loads(match.group(1))
+                return match.group(1)
+            except json.JSONDecodeError:
+                return None
+        return None
+
+    def run(self, user_input: str, schema: str) -> dict:
+        """Run the workflow for a user query."""
+        start_time = time.time()
+
+        initial_state = {
+            "user_input": user_input,
+            "messages": [],
+            "schema": schema,
+            "code": None,
+            "result": None,
+            "figure_json": None,
+            "iterations": 0,
+            "error": None,
+            "final_response": "",
+            "execution_time": 0
+        }
+
+        result = self.workflow.invoke(initial_state)
+        result["execution_time"] = time.time() - start_time
+
+        # Extract SQL from code
+        sql_query = extract_sql_from_code(result.get("code", ""))
+
+        return {
+            "response": result["final_response"],
+            "sql_query": sql_query,
+            "python_code": result["code"],
+            "figure_json": result["figure_json"],
+            "execution_time": result["execution_time"],
+            "error": result["error"]
+        }
+
+    def cleanup(self):
+        """Clean up resources."""
+        self.repl.cleanup()

@@ -1,12 +1,13 @@
-"""
-Performance Metrics Page - Analytics dashboard
-"""
 import streamlit as st
-from database.query_storage import QueryStorage
 import plotly.express as px
 import plotly.graph_objects as go
 import pandas as pd
-from datetime import datetime, timedelta
+import sys
+import os
+
+sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+from database.query_storage import QueryStorage
+from config import DATABASE_URL
 
 st.set_page_config(
     page_title="Performance Metrics - Agentic Data Analysis",
@@ -14,174 +15,177 @@ st.set_page_config(
     layout="wide"
 )
 
-# Initialize
-if 'query_storage' not in st.session_state:
-    st.session_state.query_storage = QueryStorage()
-
 st.title("📊 Performance Metrics")
-st.markdown("Track analytics and user feedback")
+
+# Initialize query storage
+if 'query_storage' not in st.session_state or st.session_state.query_storage is None:
+    try:
+        st.session_state.query_storage = QueryStorage(DATABASE_URL)
+    except Exception as e:
+        st.error(f"Database connection error: {e}")
+        st.stop()
+
+query_storage = st.session_state.query_storage
 
 # Get metrics
-try:
-    metrics = st.session_state.query_storage.get_performance_metrics()
-    all_queries = st.session_state.query_storage.get_all_queries(limit=1000)
-    
-    # Overview metrics
-    st.markdown("### 📈 Overview")
-    col1, col2, col3, col4 = st.columns(4)
-    
-    with col1:
-        st.metric("Total Queries", metrics['total_queries'])
-    
-    with col2:
-        st.metric("Avg Response Time", f"{metrics['avg_execution_time']:.2f}s")
-    
-    with col3:
-        satisfaction = metrics['satisfaction_rate']
-        st.metric("Satisfaction Rate", f"{satisfaction:.1f}%")
-    
-    with col4:
-        st.metric("Saved Queries", metrics['saved_count'])
-    
-    st.divider()
-    
-    # Feedback Distribution
-    st.markdown("### 👍👎 User Feedback")
+metrics = query_storage.get_performance_metrics()
+
+# Key metrics
+st.markdown("### Overview")
+col1, col2, col3, col4 = st.columns(4)
+
+with col1:
+    st.metric(
+        "Total Queries",
+        metrics['total_queries'],
+        help="Total number of queries executed"
+    )
+
+with col2:
+    st.metric(
+        "Avg Execution Time",
+        f"{metrics['avg_execution_time']:.2f}s",
+        help="Average query execution time in seconds"
+    )
+
+with col3:
+    st.metric(
+        "Satisfaction Rate",
+        f"{metrics['satisfaction_rate']:.1f}%",
+        help="Percentage of liked queries out of all rated queries"
+    )
+
+with col4:
+    st.metric(
+        "Saved Queries",
+        metrics['saved_count'],
+        help="Number of queries marked as saved"
+    )
+
+st.markdown("---")
+
+# Feedback distribution
+st.markdown("### Feedback Distribution")
+
+col1, col2 = st.columns(2)
+
+with col1:
+    # Pie chart of feedback
+    feedback_data = {
+        'Feedback': ['Liked', 'Disliked', 'No Feedback'],
+        'Count': [
+            metrics['likes'],
+            metrics['dislikes'],
+            metrics['total_queries'] - metrics['likes'] - metrics['dislikes']
+        ]
+    }
+    df_feedback = pd.DataFrame(feedback_data)
+
+    fig = px.pie(
+        df_feedback,
+        values='Count',
+        names='Feedback',
+        title='Query Feedback Distribution',
+        color='Feedback',
+        color_discrete_map={
+            'Liked': '#4CAF50',
+            'Disliked': '#F44336',
+            'No Feedback': '#9E9E9E'
+        }
+    )
+    fig.update_layout(template='plotly_dark')
+    st.plotly_chart(fig, use_container_width=True)
+
+with col2:
+    # Bar chart of metrics
+    metric_data = {
+        'Metric': ['Total Queries', 'Saved', 'Liked', 'Disliked'],
+        'Value': [
+            metrics['total_queries'],
+            metrics['saved_count'],
+            metrics['likes'],
+            metrics['dislikes']
+        ]
+    }
+    df_metrics = pd.DataFrame(metric_data)
+
+    fig = px.bar(
+        df_metrics,
+        x='Metric',
+        y='Value',
+        title='Query Statistics',
+        color='Value',
+        color_continuous_scale='Viridis'
+    )
+    fig.update_layout(template='plotly_dark')
+    st.plotly_chart(fig, use_container_width=True)
+
+st.markdown("---")
+
+# Get all queries for additional analysis
+queries = query_storage.get_all_queries(limit=1000)
+
+if queries:
+    st.markdown("### Query Analysis")
+
+    # Execution time distribution
     col1, col2 = st.columns(2)
-    
+
     with col1:
-        # Pie chart for feedback
-        feedback_data = pd.DataFrame({
-            'Feedback': ['Likes', 'Dislikes', 'No Feedback'],
-            'Count': [
-                metrics['likes'],
-                metrics['dislikes'],
-                metrics['total_queries'] - metrics['likes'] - metrics['dislikes']
-            ]
-        })
-        
-        fig_feedback = px.pie(
-            feedback_data,
-            values='Count',
-            names='Feedback',
-            title='Feedback Distribution',
-            color='Feedback',
-            color_discrete_map={
-                'Likes': '#2ca02c',
-                'Dislikes': '#d62728',
-                'No Feedback': '#7f7f7f'
-            }
-        )
-        st.plotly_chart(fig_feedback, use_container_width=True)
-    
-    with col2:
-        # Bar chart for feedback counts
-        fig_bar = go.Figure(data=[
-            go.Bar(name='Likes', x=['Feedback'], y=[metrics['likes']], marker_color='#2ca02c'),
-            go.Bar(name='Dislikes', x=['Feedback'], y=[metrics['dislikes']], marker_color='#d62728')
-        ])
-        fig_bar.update_layout(
-            title='Likes vs Dislikes',
-            yaxis_title='Count',
-            barmode='group'
-        )
-        st.plotly_chart(fig_bar, use_container_width=True)
-    
-    st.divider()
-    
-    # Query Volume Over Time
-    st.markdown("### 📅 Query Volume Over Time")
-    
-    if all_queries:
-        # Group by date
-        query_dates = [q['timestamp'].date() for q in all_queries]
-        date_counts = pd.Series(query_dates).value_counts().sort_index()
-        
-        df_timeline = pd.DataFrame({
-            'Date': date_counts.index,
-            'Queries': date_counts.values
-        })
-        
-        fig_timeline = px.line(
-            df_timeline,
-            x='Date',
-            y='Queries',
-            title='Queries Per Day',
-            markers=True
-        )
-        st.plotly_chart(fig_timeline, use_container_width=True)
-    else:
-        st.info("No query data available yet")
-    
-    st.divider()
-    
-    # Execution Time Statistics
-    st.markdown("### ⏱️ Execution Time Analysis")
-    
-    if all_queries:
-        execution_times = [q['execution_time'] for q in all_queries if q['execution_time']]
-        
-        if execution_times:
-            col1, col2 = st.columns(2)
-            
-            with col1:
-                # Histogram
-                fig_hist = px.histogram(
-                    execution_times,
-                    nbins=20,
-                    title='Execution Time Distribution',
-                    labels={'value': 'Execution Time (s)', 'count': 'Frequency'}
-                )
-                st.plotly_chart(fig_hist, use_container_width=True)
-            
-            with col2:
-                # Box plot
-                fig_box = px.box(
-                    y=execution_times,
-                    title='Execution Time Statistics',
-                    labels={'y': 'Execution Time (s)'}
-                )
-                st.plotly_chart(fig_box, use_container_width=True)
-            
-            # Statistics table
-            stats_df = pd.DataFrame({
-                'Metric': ['Min', 'Max', 'Mean', 'Median', 'Std Dev'],
-                'Value (seconds)': [
-                    f"{min(execution_times):.2f}",
-                    f"{max(execution_times):.2f}",
-                    f"{sum(execution_times)/len(execution_times):.2f}",
-                    f"{sorted(execution_times)[len(execution_times)//2]:.2f}",
-                    f"{pd.Series(execution_times).std():.2f}"
-                ]
-            })
-            st.table(stats_df)
+        exec_times = [q['execution_time'] for q in queries if q['execution_time']]
+        if exec_times:
+            fig = px.histogram(
+                x=exec_times,
+                nbins=20,
+                title='Execution Time Distribution',
+                labels={'x': 'Execution Time (s)', 'y': 'Count'}
+            )
+            fig.update_layout(template='plotly_dark')
+            st.plotly_chart(fig, use_container_width=True)
         else:
             st.info("No execution time data available")
-    else:
-        st.info("No query data available yet")
-    
-    st.divider()
-    
-    # Recent Activity
-    st.markdown("### 🕐 Recent Activity")
-    
-    recent_queries = all_queries[:10]
-    if recent_queries:
-        for query in recent_queries:
-            feedback_emoji = ""
-            if query['feedback'] == 'like':
-                feedback_emoji = "👍"
-            elif query['feedback'] == 'dislike':
-                feedback_emoji = "👎"
-            
-            saved_badge = "💾" if query['is_saved'] else ""
-            
-            st.markdown(
-                f"**{query['timestamp'].strftime('%Y-%m-%d %H:%M:%S')}** {feedback_emoji} {saved_badge} - "
-                f"{query['user_question'][:100]}..."
-            )
-    else:
-        st.info("No recent activity")
 
-except Exception as e:
-    st.error(f"Error loading metrics: {str(e)}")
+    with col2:
+        # Queries over time
+        timestamps = [q['timestamp'] for q in queries if q['timestamp']]
+        if timestamps:
+            df_time = pd.DataFrame({'timestamp': timestamps})
+            df_time['date'] = pd.to_datetime(df_time['timestamp']).dt.date
+            df_daily = df_time.groupby('date').size().reset_index(name='count')
+
+            fig = px.line(
+                df_daily,
+                x='date',
+                y='count',
+                title='Queries Over Time',
+                labels={'date': 'Date', 'count': 'Number of Queries'}
+            )
+            fig.update_layout(template='plotly_dark')
+            st.plotly_chart(fig, use_container_width=True)
+        else:
+            st.info("No timestamp data available")
+
+    # Additional stats
+    st.markdown("### Summary Statistics")
+
+    col1, col2, col3 = st.columns(3)
+
+    with col1:
+        if exec_times:
+            st.metric("Min Execution Time", f"{min(exec_times):.2f}s")
+            st.metric("Max Execution Time", f"{max(exec_times):.2f}s")
+        else:
+            st.info("No execution data")
+
+    with col2:
+        with_viz = sum(1 for q in queries if q['figure_json'])
+        st.metric("Queries with Visualization", with_viz)
+        st.metric("Visualization Rate", f"{(with_viz / len(queries) * 100):.1f}%" if queries else "0%")
+
+    with col3:
+        with_sql = sum(1 for q in queries if q['sql_query'])
+        st.metric("Queries with SQL", with_sql)
+        st.metric("SQL Generation Rate", f"{(with_sql / len(queries) * 100):.1f}%" if queries else "0%")
+
+else:
+    st.info("No queries found. Start chatting to generate performance data!")

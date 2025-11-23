@@ -1,492 +1,287 @@
-"""
-Chat Page - Main interface for asking questions
-"""
 import streamlit as st
-import os
-from dotenv import load_dotenv
-import plotly.graph_objects as go
+import plotly.io as pio
 import json
-from pathlib import Path
-import datetime
+import sys
+import os
 
-# Load environment variables
-load_dotenv()
-
-# Import local modules
-import config
+sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from database.DatabaseManager import DatabaseManager
-from database.csv_ingestion import ingest_csv
-from database.database_setup import initialize_database
 from database.query_storage import QueryStorage
-from agents.workflow_manager import create_workflow
-from utils.sql_extractor import format_sql
+from database.csv_ingestion import ingest_csv
+from database.etl_3nf import ETLPipeline
+from agents.workflow_manager import WorkflowManager
+from config import DATABASE_URL
 
-# Page configuration
+# Load API key from environment
+OPENAI_API_KEY = os.getenv("OPENAI_API_KEY", "")
+
 st.set_page_config(
     page_title="Chat - Agentic Data Analysis",
     page_icon="💬",
     layout="wide"
 )
 
+st.title("💬 Chat")
 
-def init_session_state():
-    """Initialize session state variables"""
-    if 'query_storage' not in st.session_state:
-        st.session_state.query_storage = QueryStorage()
-    
-    # Initialize current session if not set
-    if 'current_session_id' not in st.session_state:
-        # Try to get most recent session
-        sessions = st.session_state.query_storage.get_sessions()
-        if sessions:
-            st.session_state.current_session_id = sessions[0]['id']
-        else:
-            # Create default session
-            st.session_state.current_session_id = st.session_state.query_storage.create_session("New Chat")
-    
-    if 'messages' not in st.session_state:
-        st.session_state.messages = []
-        load_chat_history()
-            
-    if 'db_manager' not in st.session_state:
-        st.session_state.db_manager = None
-    if 'workflow' not in st.session_state:
-        st.session_state.workflow = None
-    if 'database_initialized' not in st.session_state:
-        st.session_state.database_initialized = False
+# Initialize session state
+if 'messages' not in st.session_state:
+    st.session_state.messages = []
+if 'current_session_id' not in st.session_state:
+    st.session_state.current_session_id = None
+if 'database_initialized' not in st.session_state:
+    st.session_state.database_initialized = False
+if 'db_manager' not in st.session_state:
+    st.session_state.db_manager = None
+if 'workflow' not in st.session_state:
+    st.session_state.workflow = None
+if 'query_storage' not in st.session_state:
+    st.session_state.query_storage = None
+if 'api_key' not in st.session_state:
+    st.session_state.api_key = OPENAI_API_KEY if OPENAI_API_KEY else None
 
+# Sidebar
+with st.sidebar:
+    st.header("Configuration")
 
-def load_chat_history():
-    """Load chat history for current session"""
-    try:
-        session_id = st.session_state.current_session_id
-        recent_queries = st.session_state.query_storage.get_all_queries(limit=50, session_id=session_id)
-        st.session_state.messages = []
-        
-        # Convert database queries to chat messages
-        for query in reversed(recent_queries):  # Reverse to get chronological order
-            # Add user message
-            st.session_state.messages.append({
-                "role": "user",
-                "content": query['user_question']
-            })
-            
-            # Add assistant message
-            assistant_msg = {
-                "role": "assistant",
-                "content": query['result_text'] or "I processed your question.",
-                "query_id": query['id'],
-                "feedback": query.get('feedback', 'none'),
-                "is_saved": query.get('is_saved', False)
-            }
-            
-            if query['figure_json']:
-                assistant_msg['figure'] = query['figure_json']
-            
-            st.session_state.messages.append(assistant_msg)
-    except Exception as e:
-        st.error(f"Error loading history: {e}")
-        st.session_state.messages = []
+    # API Key
+    api_key = st.text_input("OpenAI API Key", type="password", value=st.session_state.api_key or "")
+    if api_key:
+        st.session_state.api_key = api_key
 
+    st.markdown("---")
 
-def get_api_key():
-    """Get OpenAI API key from session state or environment"""
-    if 'api_key' in st.session_state and st.session_state.api_key:
-        return st.session_state.api_key
-    return os.getenv('OPENAI_API_KEY')
+    # Database status
+    st.subheader("Database")
 
-
-def initialize_database_if_needed():
-    """Initialize database with default data if not already done"""
-    if not st.session_state.database_initialized:
+    # Initialize database manager
+    if st.session_state.db_manager is None:
         try:
-            result = initialize_database()
-            st.session_state.db_manager = DatabaseManager()
-            st.session_state.database_initialized = True
-            return True, result
+            st.session_state.db_manager = DatabaseManager(DATABASE_URL)
+            if st.session_state.db_manager.test_connection():
+                st.session_state.database_initialized = True
+                st.session_state.query_storage = QueryStorage(DATABASE_URL)
         except Exception as e:
-            return False, f"Error initializing database: {str(e)}"
-    return True, "Database already initialized"
+            st.error(f"Database error: {e}")
 
+    if st.session_state.database_initialized:
+        st.success("Connected")
+        tables = st.session_state.db_manager.get_table_names()
+        st.caption(f"{len(tables)} tables available")
+    else:
+        st.warning("Not connected")
 
-def handle_csv_upload(uploaded_file):
-    """Handle CSV file upload and ingestion"""
-    try:
-        temp_path = config.DATA_DIR / uploaded_file.name
-        with open(temp_path, 'wb') as f:
-            f.write(uploaded_file.getbuffer())
-        
-        result = ingest_csv(str(temp_path))
-        st.session_state.db_manager = DatabaseManager()
-        st.session_state.workflow = None
-        
-        return True, result
-    except Exception as e:
-        return False, f"Error uploading CSV: {str(e)}"
+    # CSV Upload
+    st.markdown("---")
+    st.subheader("Upload Data")
 
+    uploaded_file = st.file_uploader("Upload CSV", type=['csv'])
+    if uploaded_file:
+        if st.button("Load CSV"):
+            with st.spinner("Loading data..."):
+                # Save uploaded file temporarily
+                temp_path = f"/tmp/{uploaded_file.name}"
+                with open(temp_path, 'wb') as f:
+                    f.write(uploaded_file.getvalue())
 
-def get_or_create_workflow():
-    """Get existing workflow or create new one"""
-    api_key = get_api_key()
-    
-    if not api_key:
-        return None, "Please provide an OpenAI API key"
-    
-    if st.session_state.workflow is None:
-        try:
+                try:
+                    # Use ETL pipeline for structured data
+                    etl = ETLPipeline(DATABASE_URL)
+                    etl.drop_tables()
+                    etl.create_tables()
+                    etl.transform_and_load(temp_path)
+                    etl.close()
+
+                    st.session_state.database_initialized = True
+                    st.success("Data loaded!")
+                    st.rerun()
+                except Exception as e:
+                    # Fallback to simple ingestion
+                    try:
+                        table_name = ingest_csv(temp_path, database_url=DATABASE_URL)
+                        st.success(f"Loaded as table: {table_name}")
+                        st.rerun()
+                    except Exception as e2:
+                        st.error(f"Error: {e2}")
+
+    # View schema
+    if st.session_state.database_initialized:
+        with st.expander("View Database Schema"):
             schema = st.session_state.db_manager.get_schema()
-            workflow = create_workflow(
-                api_key=api_key,
-                database_url=str(config.DATABASE_URL),
-                schema=schema
-            )
-            st.session_state.workflow = workflow
-            return workflow, None
-        except Exception as e:
-            return None, f"Error creating workflow: {str(e)}"
-    
-    return st.session_state.workflow, None
+            st.code(schema, language='text')
 
+    st.markdown("---")
 
-def main():
-    """Main application"""
-    
-    init_session_state()
-    
-    # Auto-initialize database on first run
-    if not st.session_state.database_initialized:
-        try:
-            result = initialize_database()
-            st.session_state.db_manager = DatabaseManager()
-            st.session_state.database_initialized = True
-        except Exception as e:
-            st.error(f"Error auto-initializing database: {str(e)}")
-    
-    # Header
-    st.title("💬 Chat with Your Data")
-    st.markdown("Ask questions in natural language and get intelligent visualizations")
-    
-    # Sidebar
-    with st.sidebar:
-        st.header("💬 Chat Sessions")
-        
-        # Session Management
-        col1, col2 = st.columns([1, 1])
-        with col1:
-            if st.button("➕ New Chat", use_container_width=True):
-                new_id = st.session_state.query_storage.create_session(f"Chat {datetime.datetime.now().strftime('%H:%M')}")
-                st.session_state.current_session_id = new_id
-                st.session_state.messages = []
-                st.rerun()
-        
-        with col2:
-            if st.button("🗑️ Clear", help="Delete current session", use_container_width=True):
-                st.session_state.query_storage.delete_session(st.session_state.current_session_id)
-                del st.session_state.current_session_id
-                st.rerun()
+    # Session management
+    st.subheader("Chat Sessions")
 
-        # Session Selector
-        sessions = st.session_state.query_storage.get_sessions()
-        session_options = {s['id']: f"{s['name']} ({s['created_at'].strftime('%m/%d %H:%M')})" for s in sessions}
-        
-        selected_session_id = st.selectbox(
-            "Switch Chat",
-            options=list(session_options.keys()),
-            format_func=lambda x: session_options[x],
-            index=list(session_options.keys()).index(st.session_state.current_session_id) if st.session_state.current_session_id in session_options else 0,
-            key="session_selector"
-        )
-        
-        if selected_session_id != st.session_state.current_session_id:
-            st.session_state.current_session_id = selected_session_id
-            load_chat_history()
+    if st.session_state.query_storage:
+        # Create new session button
+        if st.button("➕ New Chat", use_container_width=True):
+            session_id = st.session_state.query_storage.create_session()
+            st.session_state.current_session_id = session_id
+            st.session_state.messages = []
             st.rerun()
-            
-        # Rename Session
-        with st.expander("✏️ Rename Chat"):
-            current_name = next((s['name'] for s in sessions if s['id'] == st.session_state.current_session_id), "New Chat")
-            new_name = st.text_input("New Name", value=current_name)
-            if st.button("Update Name"):
-                if new_name and new_name != current_name:
-                    st.session_state.query_storage.rename_session(st.session_state.current_session_id, new_name)
+
+        # List sessions
+        sessions = st.session_state.query_storage.get_sessions()
+        for session in sessions:
+            col1, col2, col3 = st.columns([3, 1, 1])
+            with col1:
+                if st.button(session['name'][:20], key=f"session_{session['id']}", use_container_width=True):
+                    st.session_state.current_session_id = session['id']
+                    # Load session messages
+                    queries = st.session_state.query_storage.get_session_queries(session['id'])
+                    st.session_state.messages = []
+                    for q in queries:
+                        st.session_state.messages.append({"role": "user", "content": q['user_question']})
+                        st.session_state.messages.append({
+                            "role": "assistant",
+                            "content": q['result_text'] or "Response generated",
+                            "query_id": q['id'],
+                            "sql_query": q['sql_query'],
+                            "python_code": q['python_code'],
+                            "figure_json": q['figure_json'],
+                            "execution_time": q['execution_time'],
+                            "feedback": q['feedback']
+                        })
+                    st.rerun()
+            with col2:
+                if st.button("✏️", key=f"rename_{session['id']}"):
+                    st.session_state[f"renaming_{session['id']}"] = True
+            with col3:
+                if st.button("🗑️", key=f"delete_{session['id']}"):
+                    st.session_state.query_storage.delete_session(session['id'])
+                    if st.session_state.current_session_id == session['id']:
+                        st.session_state.current_session_id = None
+                        st.session_state.messages = []
                     st.rerun()
 
-        st.divider()
-        
-        st.header("⚙️ Configuration")
-        
-        # API Key input
-        api_key_input = st.text_input(
-            "OpenAI API Key",
-            type="password",
-            value=st.session_state.get('api_key', ''),
-            help="Enter your OpenAI API key or set OPENAI_API_KEY environment variable"
-        )
-        
-        if api_key_input:
-            st.session_state.api_key = api_key_input
-        
-        api_key = get_api_key()
-        if api_key:
-            st.success("✅ API Key configured")
-        else:
-            st.warning("⚠️ Please provide an API Key")
-        
-        st.divider()
-        
-        # Database initialization
-        st.header("📁 Data Source")
-        
-        if st.session_state.database_initialized:
-            st.success("✅ Database initialized")
-            
-            if st.session_state.db_manager:
-                tables = st.session_state.db_manager.get_table_names()
-                st.info(f"📊 Tables: {', '.join(tables)}")
-        else:
-            st.warning("⚠️ Database not initialized")
-            if st.button("Retry Initialization"):
-                with st.spinner("Initializing database..."):
-                    success, message = initialize_database_if_needed()
-                    if success:
-                        st.success(message)
-                        st.rerun()
-                    else:
-                        st.error(message)
-        
-        st.divider()
-        
-        # CSV Upload
-        st.header("📤 Upload CSV")
-        uploaded_file = st.file_uploader(
-            "Upload a CSV file to analyze",
-            type=['csv'],
-            help="Upload a CSV file to create a new table in the database"
-        )
-        
-        if uploaded_file is not None:
-            if st.button("Process CSV"):
-                with st.spinner("Processing CSV..."):
-                    success, message = handle_csv_upload(uploaded_file)
-                    if success:
-                        st.success(message)
-                        st.rerun()
-                    else:
-                        st.error(message)
-        
-        st.divider()
-        
-        # Database Schema
-        if st.session_state.db_manager:
-            with st.expander("📋 View Database Schema"):
-                schema = st.session_state.db_manager.get_schema()
-                st.code(schema, language="text")
-    
-    # Main content area - only check for API key
-    if not api_key:
-        st.warning("👈 Please provide an OpenAI API key in the sidebar")
-        return
-    
-    # Chat interface
-    st.header("Ask Questions About Your Data")
-    
-    # Display chat messages
-    for idx, message in enumerate(st.session_state.messages):
+            # Rename input
+            if st.session_state.get(f"renaming_{session['id']}", False):
+                new_name = st.text_input("New name", value=session['name'], key=f"new_name_{session['id']}")
+                if st.button("Save", key=f"save_name_{session['id']}"):
+                    st.session_state.query_storage.rename_session(session['id'], new_name)
+                    st.session_state[f"renaming_{session['id']}"] = False
+                    st.rerun()
+
+        # Create initial session if none exists
+        if not sessions:
+            session_id = st.session_state.query_storage.create_session()
+            st.session_state.current_session_id = session_id
+            st.rerun()
+        elif st.session_state.current_session_id is None:
+            st.session_state.current_session_id = sessions[0]['id']
+
+# Main chat area
+if not st.session_state.api_key:
+    st.warning("Please enter your OpenAI API key in the sidebar to start chatting.")
+elif not st.session_state.database_initialized:
+    st.warning("Please connect to a database or upload a CSV file to start.")
+else:
+    # Initialize workflow
+    if st.session_state.workflow is None and st.session_state.api_key:
+        st.session_state.workflow = WorkflowManager(st.session_state.api_key, DATABASE_URL)
+
+    # Display chat history
+    for i, message in enumerate(st.session_state.messages):
         with st.chat_message(message["role"]):
-            st.markdown(message["content"])
-            
-            # Display visualization if present
-            if "figure" in message and message["figure"]:
-                try:
-                    fig = go.Figure(json.loads(message["figure"]))
-                    st.plotly_chart(fig, use_container_width=True)
-                except Exception as e:
-                    st.error(f"Error displaying chart: {str(e)}")
-            
-            # Feedback buttons for assistant messages
-            if message["role"] == "assistant" and "query_id" in message:
-                # Get current state from database to ensure we have the latest status
-                # This is crucial for the buttons to reflect the correct state after a rerun
-                try:
-                    current_query = st.session_state.query_storage.get_queries_by_ids([message["query_id"]])
-                    if current_query:
-                        current_feedback = current_query[0].get('feedback', 'none')
-                        current_is_saved = current_query[0].get('is_saved', False)
-                    else:
+            if message["role"] == "user":
+                st.write(message["content"])
+            else:
+                # Display figure if available
+                if message.get("figure_json"):
+                    try:
+                        fig = pio.from_json(message["figure_json"])
+                        st.plotly_chart(fig, use_container_width=True)
+                    except Exception as e:
+                        st.error(f"Error displaying chart: {e}")
+
+                # Display text response
+                st.write(message["content"])
+
+                # Show code in expander
+                with st.expander("View Python Code"):
+                    st.code(message.get("python_code", "N/A"), language='python')
+
+                # Feedback and save buttons
+                if message.get("query_id"):
+                    col1, col2, col3, col4 = st.columns([1, 1, 1, 3])
+                    with col1:
                         current_feedback = message.get("feedback", "none")
-                        current_is_saved = message.get("is_saved", False)
-                except:
-                    current_feedback = message.get("feedback", "none")
-                    current_is_saved = message.get("is_saved", False)
-                
-                col1, col2, col3, col4 = st.columns([1, 1, 2, 8])
-                
-                with col1:
-                    # Like button
-                    button_type = "primary" if current_feedback == "like" else "secondary"
-                    if st.button("👍", key=f"like_{message['query_id']}", type=button_type):
-                        st.session_state.query_storage.update_feedback(message["query_id"], "like")
-                        message["feedback"] = "like"
-                        st.rerun()
-                
-                with col2:
-                    # Dislike button
-                    button_type = "primary" if current_feedback == "dislike" else "secondary"
-                    if st.button("👎", key=f"dislike_{message['query_id']}", type=button_type):
-                        st.session_state.query_storage.update_feedback(message["query_id"], "dislike")
-                        message["feedback"] = "dislike"
-                        st.rerun()
-                
-                with col3:
-                    # Save query button
-                    if current_is_saved:
-                        st.success("✅ Saved")
-                    else:
-                        if st.button("💾 Save Query", key=f"save_{message['query_id']}"):
-                            st.session_state.query_storage.mark_as_saved(message["query_id"])
-                            message["is_saved"] = True
+                        if st.button("👍", key=f"like_{i}",
+                                    type="primary" if current_feedback == "like" else "secondary"):
+                            st.session_state.query_storage.update_feedback(message["query_id"], "like")
+                            st.session_state.messages[i]["feedback"] = "like"
                             st.rerun()
-    
+                    with col2:
+                        if st.button("👎", key=f"dislike_{i}",
+                                    type="primary" if current_feedback == "dislike" else "secondary"):
+                            st.session_state.query_storage.update_feedback(message["query_id"], "dislike")
+                            st.session_state.messages[i]["feedback"] = "dislike"
+                            st.rerun()
+                    with col3:
+                        if st.button("💾 Save", key=f"save_{i}"):
+                            st.session_state.query_storage.mark_as_saved(message["query_id"], True)
+                            st.success("Saved!")
+
+                # Execution time
+                if message.get("execution_time"):
+                    st.caption(f"Execution time: {message['execution_time']:.2f}s")
+
     # Chat input
     if prompt := st.chat_input("Ask a question about your data..."):
         # Add user message
         st.session_state.messages.append({"role": "user", "content": prompt})
-        
+
         with st.chat_message("user"):
-            st.markdown(prompt)
-        
-        # Get or create workflow
-        workflow, error = get_or_create_workflow()
-        
-        if error:
-            with st.chat_message("assistant"):
-                st.error(error)
-            return
-        
-        # Process query
+            st.write(prompt)
+
+        # Generate response
         with st.chat_message("assistant"):
-            with st.spinner("Analyzing your question..."):
-                try:
-                    result = workflow.run_query(prompt)
-                    
-                    # Display response
-                    st.markdown(result['response'])
-                    
-                    # Save to database
-                    query_id = st.session_state.query_storage.save_query(
-                        user_question=prompt,
-                        sql_query=result.get('sql_query'),
-                        python_code=result.get('code'),
-                        result_text=result.get('response'),
-                        figure_json=result.get('figure_json'),
-                        execution_time=result.get('execution_time'),
-                        is_saved=False,
-                        session_id=st.session_state.current_session_id
-                    )
-                    
-                    # Display visualization if available
-                    if result['figure_json']:
-                        try:
-                            fig = go.Figure(json.loads(result['figure_json']))
-                            st.plotly_chart(fig, use_container_width=True)
-                            
-                            # Save to message history with feedback and saved state
-                            st.session_state.messages.append({
-                                "role": "assistant",
-                                "content": result['response'],
-                                "figure": result['figure_json'],
-                                "query_id": query_id,
-                                "feedback": "none",
-                                "is_saved": False
-                            })
-                        except Exception as e:
-                            st.error(f"Error displaying visualization: {str(e)}")
-                            st.session_state.messages.append({
-                                "role": "assistant",
-                                "content": result['response'],
-                                "query_id": query_id,
-                                "feedback": "none",
-                                "is_saved": False
-                            })
-                    else:
-                        st.session_state.messages.append({
-                            "role": "assistant",
-                            "content": result['response'],
-                            "query_id": query_id,
-                            "feedback": "none",
-                            "is_saved": False
-                        })
-                    
-                    # SQL query is already shown in generated code, so we skip this
-                    
-                    # Show generated code
-                    if result['code']:
-                        with st.expander("💻 View Generated Code"):
-                            st.code(result['code'], language="python")
-                    
-                    # Show execution time
-                    if result.get('execution_time'):
-                        st.caption(f"⏱️ Execution time: {result['execution_time']:.2f}s")
-                    
-                    # Feedback and Save buttons
-                    col1, col2, col3, col4 = st.columns([1, 1, 2, 8])
-                    
-                    # Get current state from database
-                    current_query = st.session_state.query_storage.get_queries_by_ids([query_id])
-                    if current_query:
-                        current_feedback = current_query[0].get('feedback', 'none')
-                        current_is_saved = current_query[0].get('is_saved', False)
-                    else:
-                        current_feedback = 'none'
-                        current_is_saved = False
-                    
-                    with col1:
-                        # Like button
-                        button_type = "primary" if current_feedback == "like" else "secondary"
-                        if st.button("👍", key=f"like_new_{query_id}", type=button_type):
-                            st.session_state.query_storage.update_feedback(query_id, "like")
-                            # Update message in session state
-                            for msg in st.session_state.messages:
-                                if msg.get("query_id") == query_id:
-                                    msg["feedback"] = "like"
-                            st.rerun()
-                    
-                    with col2:
-                        # Dislike button
-                        button_type = "primary" if current_feedback == "dislike" else "secondary"
-                        if st.button("👎", key=f"dislike_new_{query_id}", type=button_type):
-                            st.session_state.query_storage.update_feedback(query_id, "dislike")
-                            # Update message in session state
-                            for msg in st.session_state.messages:
-                                if msg.get("query_id") == query_id:
-                                    msg["feedback"] = "dislike"
-                            st.rerun()
-                    
-                    with col3:
-                        # Save query button
-                        if current_is_saved:
-                            st.success("✅ Saved")
-                        else:
-                            if st.button("💾 Save Query", key=f"save_new_{query_id}"):
-                                st.session_state.query_storage.mark_as_saved(query_id)
-                                # Update message in session state
-                                for msg in st.session_state.messages:
-                                    if msg.get("query_id") == query_id:
-                                        msg["is_saved"] = True
-                                st.rerun()
-                    
-                    # Show error if any
-                    if result['error']:
-                        st.warning(f"Note: {result['error']}")
-                
-                except Exception as e:
-                    error_msg = f"Error processing query: {str(e)}"
-                    st.error(error_msg)
-                    st.session_state.messages.append({
-                        "role": "assistant",
-                        "content": error_msg
-                    })
+            with st.spinner("Analyzing..."):
+                # Get schema
+                schema = st.session_state.db_manager.get_schema()
 
+                # Run workflow
+                result = st.session_state.workflow.run(prompt, schema)
 
-if __name__ == "__main__":
-    main()
+                # Display figure
+                if result.get("figure_json"):
+                    try:
+                        fig = pio.from_json(result["figure_json"])
+                        st.plotly_chart(fig, use_container_width=True)
+                    except Exception as e:
+                        st.error(f"Error displaying chart: {e}")
+
+                # Display response
+                st.write(result["response"])
+
+                # Show code
+                with st.expander("View Python Code"):
+                    st.code(result.get("python_code", "N/A"), language='python')
+
+                # Save to database
+                query_id = st.session_state.query_storage.save_query(
+                    session_id=st.session_state.current_session_id,
+                    user_question=prompt,
+                    sql_query=result.get("sql_query"),
+                    python_code=result.get("python_code"),
+                    result_text=result["response"],
+                    figure_json=result.get("figure_json"),
+                    execution_time=result.get("execution_time")
+                )
+
+                # Add to messages
+                st.session_state.messages.append({
+                    "role": "assistant",
+                    "content": result["response"],
+                    "query_id": query_id,
+                    "sql_query": result.get("sql_query"),
+                    "python_code": result.get("python_code"),
+                    "figure_json": result.get("figure_json"),
+                    "execution_time": result.get("execution_time"),
+                    "feedback": "none"
+                })
+
+                # Execution time
+                st.caption(f"Execution time: {result.get('execution_time', 0):.2f}s")

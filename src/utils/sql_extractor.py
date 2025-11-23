@@ -1,90 +1,87 @@
-"""
-SQL Extraction - Extract SQL queries from generated Python code
-"""
 import re
 from typing import Optional
 
 
-def extract_sql_from_code(python_code: str) -> Optional[str]:
+def extract_sql_from_code(code: str) -> Optional[str]:
     """
-    Extract SQL query from Python code
-    
+    Extract SQL query from Python code.
+
     Args:
-        python_code: Python code containing SQL query
-        
+        code: Python code that may contain SQL queries
+
     Returns:
-        Extracted SQL query or None
+        Extracted SQL query or None if not found
     """
-    if not python_code:
+    if not code:
         return None
-    
-    # Pattern 1: Triple-quoted strings assigned to 'query' variable
-    pattern1 = r'query\s*=\s*"""(.*?)"""'
-    matches = re.findall(pattern1, python_code, re.DOTALL)
-    if matches:
-        return matches[0].strip()
-    
+
+    # Pattern 1: Triple-quoted strings (most common for multi-line SQL)
+    patterns = [
+        r'query\s*=\s*"""(.*?)"""',
+        r"query\s*=\s*'''(.*?)'''",
+        r'sql\s*=\s*"""(.*?)"""',
+        r"sql\s*=\s*'''(.*?)'''",
+        r'"""(SELECT.*?)"""',
+        r"'''(SELECT.*?)'''",
+    ]
+
+    for pattern in patterns:
+        match = re.search(pattern, code, re.DOTALL | re.IGNORECASE)
+        if match:
+            return match.group(1).strip()
+
     # Pattern 2: Single-quoted strings
-    pattern2 = r"query\s*=\s*'''(.*?)'''"
-    matches = re.findall(pattern2, python_code, re.DOTALL)
-    if matches:
-        return matches[0].strip()
-    
-    # Pattern 3: Regular strings with newlines
-    pattern3 = r'query\s*=\s*"(.*?)"'
-    matches = re.findall(pattern3, python_code, re.DOTALL)
-    if matches:
-        return matches[0].strip()
-    
-    # Pattern 4: Look for SQL keywords (fallback)
-    sql_keywords = ['SELECT', 'INSERT', 'UPDATE', 'DELETE', 'CREATE']
-    for keyword in sql_keywords:
-        if keyword in python_code.upper():
-            # Try to extract the SQL statement
-            lines = python_code.split('\n')
-            sql_lines = []
-            in_sql = False
-            
-            for line in lines:
-                if keyword in line.upper():
-                    in_sql = True
-                if in_sql:
-                    sql_lines.append(line)
-                    if ';' in line or 'FROM' in line.upper():
-                        break
-            
-            if sql_lines:
-                sql = '\n'.join(sql_lines)
-                # Clean up quotes and variable assignments
-                sql = re.sub(r'query\s*=\s*["\']', '', sql)
-                sql = re.sub(r'["\']', '', sql)
-                return sql.strip()
-    
+    single_patterns = [
+        r'query\s*=\s*"([^"]+)"',
+        r"query\s*=\s*'([^']+)'",
+        r'sql\s*=\s*"([^"]+)"',
+        r"sql\s*=\s*'([^']+)'",
+    ]
+
+    for pattern in single_patterns:
+        match = re.search(pattern, code, re.IGNORECASE)
+        if match:
+            sql = match.group(1).strip()
+            if sql.upper().startswith(('SELECT', 'WITH', 'INSERT', 'UPDATE', 'DELETE')):
+                return sql
+
+    # Pattern 3: pd.read_sql with direct query
+    read_sql_pattern = r'pd\.read_sql\s*\(\s*["\']([^"\']+)["\']'
+    match = re.search(read_sql_pattern, code, re.IGNORECASE)
+    if match:
+        return match.group(1).strip()
+
+    # Pattern 4: f-strings (extract the template)
+    fstring_pattern = r'query\s*=\s*f"""(.*?)"""'
+    match = re.search(fstring_pattern, code, re.DOTALL | re.IGNORECASE)
+    if match:
+        return match.group(1).strip()
+
     return None
 
 
 def format_sql(sql: str) -> str:
     """
-    Format SQL query for better readability
-    
+    Basic SQL formatting for display.
+
     Args:
         sql: SQL query string
-        
+
     Returns:
-        Formatted SQL query
+        Formatted SQL string
     """
     if not sql:
         return ""
-    
-    # Add newlines before major SQL keywords
-    keywords = ['SELECT', 'FROM', 'WHERE', 'GROUP BY', 'ORDER BY', 'LIMIT', 'JOIN', 'HAVING']
+
+    # Add newlines before major keywords
+    keywords = ['SELECT', 'FROM', 'WHERE', 'GROUP BY', 'ORDER BY', 'HAVING',
+                'JOIN', 'LEFT JOIN', 'RIGHT JOIN', 'INNER JOIN', 'OUTER JOIN',
+                'LIMIT', 'OFFSET', 'UNION', 'WITH']
+
     formatted = sql
-    
     for keyword in keywords:
-        formatted = re.sub(f'\\s+{keyword}\\s+', f'\n{keyword} ', formatted, flags=re.IGNORECASE)
-    
-    # Clean up extra whitespace
-    formatted = re.sub(r'\n\s+', '\n', formatted)
-    formatted = re.sub(r'\s+', ' ', formatted)
-    
+        # Add newline before keyword (case-insensitive)
+        pattern = rf'\s+({keyword})\s+'
+        formatted = re.sub(pattern, f'\n{keyword} ', formatted, flags=re.IGNORECASE)
+
     return formatted.strip()

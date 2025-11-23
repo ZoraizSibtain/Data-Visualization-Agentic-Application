@@ -1,12 +1,12 @@
-"""
-Saved Queries Page - Manage and export saved queries
-"""
 import streamlit as st
+import plotly.io as pio
+import sys
+import os
+
+sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from database.query_storage import QueryStorage
-from utils.pdf_generator import PDFReportGenerator
-import plotly.graph_objects as go
-import json
-from datetime import datetime
+from utils.pdf_generator import generate_pdf_report
+from config import DATABASE_URL
 
 st.set_page_config(
     page_title="Saved Queries - Agentic Data Analysis",
@@ -14,131 +14,136 @@ st.set_page_config(
     layout="wide"
 )
 
-# Initialize
-if 'query_storage' not in st.session_state:
-    st.session_state.query_storage = QueryStorage()
-
 st.title("💾 Saved Queries")
 
-col1, col2 = st.columns([6, 1])
-with col1:
-    st.markdown("Manage your saved queries and generate PDF reports")
-with col2:
-    if st.button("🔄 Refresh"):
-        st.rerun()
+# Initialize query storage
+if 'query_storage' not in st.session_state or st.session_state.query_storage is None:
+    try:
+        st.session_state.query_storage = QueryStorage(DATABASE_URL)
+    except Exception as e:
+        st.error(f"Database connection error: {e}")
+        st.stop()
 
-st.divider()
+query_storage = st.session_state.query_storage
 
 # Get saved queries
-try:
-    saved_queries = st.session_state.query_storage.get_saved_queries()
-    
-    if not saved_queries:
-        st.info("No saved queries yet. Save queries from the Chat or History pages!")
-    else:
-        st.markdown(f"### {len(saved_queries)} Saved Queries")
-        
-        # Multi-select for PDF export
-        st.markdown("#### Select queries to export to PDF:")
-        
-        selected_ids = []
-        for query in saved_queries:
-            col1, col2 = st.columns([0.5, 11.5])
-            with col1:
-                if st.checkbox("Select", key=f"select_{query['id']}", label_visibility="collapsed"):
-                    selected_ids.append(query['id'])
-            with col2:
-                st.markdown(f"**{query['timestamp'].strftime('%Y-%m-%d %H:%M')}** - {query['user_question']}")
-        
-        st.divider()
-        
-        # Export buttons
-        col1, col2, col3 = st.columns([2, 2, 8])
+queries = query_storage.get_saved_queries()
+
+if not queries:
+    st.info("No saved queries yet. Save queries from the Chat or History pages.")
+else:
+    # Batch actions
+    st.markdown("### Batch Actions")
+
+    # Initialize selected queries in session state
+    if 'selected_queries' not in st.session_state:
+        st.session_state.selected_queries = set()
+
+    col1, col2, col3, col4 = st.columns([2, 2, 2, 2])
+
+    with col1:
+        if st.button("Select All"):
+            st.session_state.selected_queries = {q['id'] for q in queries}
+            st.rerun()
+
+    with col2:
+        if st.button("Deselect All"):
+            st.session_state.selected_queries = set()
+            st.rerun()
+
+    with col3:
+        if st.button("📄 Generate PDF Report"):
+            if st.session_state.selected_queries:
+                selected_queries = [q for q in queries if q['id'] in st.session_state.selected_queries]
+                pdf_bytes = generate_pdf_report(selected_queries, "Saved Queries Report")
+                st.download_button(
+                    "⬇️ Download PDF",
+                    data=pdf_bytes,
+                    file_name="query_report.pdf",
+                    mime="application/pdf"
+                )
+            else:
+                st.warning("Please select queries first")
+
+    with col4:
+        if st.button("🗑️ Delete Selected"):
+            if st.session_state.selected_queries:
+                for query_id in st.session_state.selected_queries:
+                    query_storage.delete_query(query_id)
+                st.session_state.selected_queries = set()
+                st.success("Deleted!")
+                st.rerun()
+
+    st.markdown("---")
+    st.markdown(f"**{len(queries)} saved queries**")
+
+    # Display queries
+    for i, query in enumerate(queries):
+        col1, col2 = st.columns([1, 20])
+
         with col1:
-            if st.button("📄 Generate PDF Report", disabled=len(selected_ids) == 0):
-                if selected_ids:
-                    with st.spinner("Generating PDF..."):
-                        try:
-                            # Get selected queries
-                            queries_to_export = st.session_state.query_storage.get_queries_by_ids(selected_ids)
-                            
-                            # Generate PDF
-                            pdf_gen = PDFReportGenerator()
-                            pdf_buffer = pdf_gen.generate_report(queries_to_export)
-                            
-                            # Download button
-                            st.download_button(
-                                label="⬇️ Download PDF",
-                                data=pdf_buffer,
-                                file_name=f"query_report_{datetime.now().strftime('%Y%m%d_%H%M%S')}.pdf",
-                                mime="application/pdf"
-                            )
-                            st.success(f"PDF generated with {len(selected_ids)} queries!")
-                        except Exception as e:
-                            st.error(f"Error generating PDF: {str(e)}")
-        
+            # Checkbox for selection
+            is_selected = query['id'] in st.session_state.selected_queries
+            if st.checkbox("", value=is_selected, key=f"select_{query['id']}"):
+                st.session_state.selected_queries.add(query['id'])
+            else:
+                st.session_state.selected_queries.discard(query['id'])
+
         with col2:
-            if st.button("🗑️ Delete Selected", disabled=len(selected_ids) == 0):
-                if selected_ids:
-                    for query_id in selected_ids:
-                        st.session_state.query_storage.delete_query(query_id)
-                    st.success(f"Deleted {len(selected_ids)} queries!")
-                    st.rerun()
-        
-        st.divider()
-        
-        # Display saved queries
-        st.markdown("### Query Details")
-        
-        for query in saved_queries:
-            with st.expander(f"🕐 {query['timestamp'].strftime('%Y-%m-%d %H:%M:%S')} - {query['user_question'][:80]}..."):
+            timestamp = query['timestamp'].strftime('%Y-%m-%d %H:%M') if query['timestamp'] else 'Unknown'
+            feedback_emoji = ""
+            if query['feedback'] == 'like':
+                feedback_emoji = " 👍"
+            elif query['feedback'] == 'dislike':
+                feedback_emoji = " 👎"
+
+            with st.expander(f"{timestamp} - {query['user_question'][:80]}{feedback_emoji}"):
                 # Question
                 st.markdown(f"**Question:** {query['user_question']}")
-                
-                # SQL Query
-                if query['sql_query']:
-                    st.markdown("**SQL Query:**")
-                    st.code(query['sql_query'], language="sql")
-                
-                # Python Code (removed nested expander to fix error)
-                if query['python_code']:
-                    st.markdown("**Python Code:**")
-                    st.code(query['python_code'], language="python")
-                
-                # Execution time
-                if query['execution_time']:
-                    st.caption(f"⏱️ Execution time: {query['execution_time']:.2f}s")
-                
+
                 # Visualization
                 if query['figure_json']:
                     try:
-                        fig = go.Figure(json.loads(query['figure_json']))
+                        fig = pio.from_json(query['figure_json'])
                         st.plotly_chart(fig, use_container_width=True)
-                    except:
-                        st.info("Visualization unavailable")
-                
+                    except Exception as e:
+                        st.warning(f"Could not load visualization: {e}")
+
+                # Result
+                if query['result_text']:
+                    st.markdown("**Result:**")
+                    st.text(query['result_text'][:500])
+
+                # SQL
+                if query['sql_query']:
+                    st.markdown("**SQL Query:**")
+                    st.code(query['sql_query'], language='sql')
+
+                # Python code
+                if query['python_code']:
+                    with st.expander("View Python Code"):
+                        st.code(query['python_code'], language='python')
+
                 # Notes
+                st.markdown("**Notes:**")
                 notes = st.text_area(
-                    "📝 Notes",
-                    value=query.get('notes', ''),
+                    "Add notes",
+                    value=query['notes'] or "",
                     key=f"notes_{query['id']}",
                     placeholder="Add notes about this query..."
                 )
-                
-                if st.button("💾 Update Notes", key=f"update_notes_{query['id']}"):
-                    st.session_state.query_storage.mark_as_saved(query['id'], notes=notes)
-                    st.success("Notes updated!")
-                
-                # Delete button
-                if st.button("🗑️ Delete", key=f"delete_{query['id']}"):
-                    st.session_state.query_storage.delete_query(query['id'])
-                    st.success("Query deleted!")
-                    st.rerun()
-                
-                # Feedback
-                if query['feedback'] != 'none':
-                    feedback_emoji = '👍' if query['feedback'] == 'like' else '👎'
-                    st.caption(f"Feedback: {feedback_emoji}")
 
-except Exception as e:
-    st.error(f"Error loading saved queries: {str(e)}")
+                col1, col2, col3 = st.columns([2, 2, 4])
+                with col1:
+                    if st.button("Save Notes", key=f"save_notes_{query['id']}"):
+                        query_storage.update_notes(query['id'], notes)
+                        st.success("Notes saved!")
+
+                with col2:
+                    if st.button("Remove from Saved", key=f"unsave_{query['id']}"):
+                        query_storage.mark_as_saved(query['id'], False)
+                        st.rerun()
+
+                # Metadata
+                if query['execution_time']:
+                    st.caption(f"Execution time: {query['execution_time']:.2f}s")

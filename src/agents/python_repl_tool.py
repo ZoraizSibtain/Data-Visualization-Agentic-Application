@@ -1,86 +1,84 @@
-"""
-Python REPL Tool - Safe execution environment for generated code
-"""
 from langchain_experimental.tools import PythonREPLTool
-from langchain.tools import tool
-from typing import Any, Dict
+from sqlalchemy import create_engine
+from sqlalchemy.pool import QueuePool
 import sys
-from io import StringIO
+import os
+
+sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+from config import DATABASE_URL
 
 
 class SafePythonREPL:
-    """Wrapper for Python REPL with pre-configured context"""
-    
-    def __init__(self, database_url: str):
-        """
-        Initialize REPL with database connection
-        
-        Args:
-            database_url: SQLAlchemy database URL
-        """
-        self.database_url = database_url
+    def __init__(self, database_url: str = None):
+        self.database_url = database_url or DATABASE_URL
         self.repl = PythonREPLTool()
-        
-        # Pre-import common libraries
-        self.setup_code = f"""
+
+        # Setup code with imports and database connection
+        self.setup_code = f'''
 import pandas as pd
 import plotly.express as px
 import plotly.graph_objects as go
-from sqlalchemy import create_engine
+from plotly.subplots import make_subplots
 import json
+from sqlalchemy import create_engine, text
+from sqlalchemy.pool import QueuePool
 
-# Create database connection
-engine = create_engine('{database_url}')
+# Create engine with connection pooling
+_db_engine = create_engine(
+    "{self.database_url}",
+    poolclass=QueuePool,
+    pool_size=5,
+    max_overflow=10,
+    pool_pre_ping=True
+)
 
-# Helper function to convert figure to JSON
-def fig_to_json(fig):
-    return fig.to_json()
-"""
-        # Execute setup code
-        try:
+# Safe wrapper for pd.read_sql that works with SQLAlchemy 2.x
+def read_sql_safe(query, con=None, **kwargs):
+    if con is None:
+        con = _db_engine
+    with con.connect() as conn:
+        return pd.read_sql_query(query, conn, **kwargs)
+
+# Override pd.read_sql with safe version
+_original_read_sql = pd.read_sql
+pd.read_sql = read_sql_safe
+engine = _db_engine
+
+# Helper to output figure JSON
+def output_figure(fig):
+    """Output Plotly figure as JSON between markers for extraction."""
+    fig_json = fig.to_json()
+    print("<<<FIGURE_JSON_START>>>")
+    print(fig_json)
+    print("<<<FIGURE_JSON_END>>>")
+    return fig
+'''
+
+        # Run setup code
+        self._initialized = False
+
+    def initialize(self):
+        """Initialize the REPL with setup code."""
+        if not self._initialized:
             self.repl.run(self.setup_code)
-        except Exception as e:
-            print(f"Warning: Setup code failed: {e}")
-    
+            self._initialized = True
+
     def run(self, code: str) -> str:
-        """
-        Execute Python code in the REPL
-        
-        Args:
-            code: Python code to execute
-            
-        Returns:
-            Execution result or error message
-        """
+        """Execute Python code in the REPL."""
+        self.initialize()
+        result = self.repl.run(code)
+        return result if result else ""
+
+    def cleanup(self):
+        """Clean up database connections."""
+        if not self._initialized:
+            return
+        cleanup_code = '''
+if '_db_engine' in dir():
+    _db_engine.dispose()
+'''
         try:
-            result = self.repl.run(code)
-            return str(result)
-        except Exception as e:
-            return f"Error: {str(e)}"
-
-
-@tool
-def python_repl_tool(code: str, database_url: str = None) -> str:
-    """
-    Execute Python code with access to database and visualization libraries.
-    
-    Use this tool to:
-    - Execute SQL queries using pandas: pd.read_sql(query, engine)
-    - Create Plotly visualizations
-    - Perform data analysis
-    
-    Args:
-        code: Python code to execute
-        database_url: Database connection URL (optional)
-        
-    Returns:
-        Result of code execution or error message
-    """
-    if database_url is None:
-        import config
-        database_url = str(config.DATABASE_URL)
-    
-    repl = SafePythonREPL(database_url)
-    result = repl.run(code)
-    
-    return result
+            self.repl.run(cleanup_code)
+        except Exception:
+            pass
+        self._initialized = False
