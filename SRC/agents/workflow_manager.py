@@ -161,13 +161,42 @@ class WorkflowManager:
 
             # Clean up the result
             if "[Visualization generated]" in result:
-                state["final_response"] = "I've generated a visualization for your query."
+                # Generate insights about the data instead of generic message
+                insights = self._generate_insights(state)
+                state["final_response"] = insights
             elif result.strip():
                 state["final_response"] = result
             else:
                 state["final_response"] = "Query executed successfully."
 
         return state
+
+    def _generate_insights(self, state: AgentState) -> str:
+        """Generate insights about the visualization data."""
+        result = state["result"] or ""
+        # Extract the actual data output (before the visualization marker)
+        data_output = result.replace("[Visualization generated]", "").strip()
+
+        if not data_output:
+            return "Visualization generated successfully."
+
+        # Ask the LLM to provide insights
+        insight_prompt = f"""Based on the following data results, provide 2-3 brief, specific insights about what the data shows. Be concise and highlight key findings (trends, outliers, notable values).
+
+Data:
+{data_output[:2000]}
+
+Original question: {state['user_input']}
+
+Provide insights in 2-3 short bullet points. Start directly with the insights, no preamble."""
+
+        try:
+            messages = [HumanMessage(content=insight_prompt)]
+            response = self.llm.invoke(messages)
+            return response.content.strip()
+        except Exception as e:
+            # Fallback to basic summary
+            return f"Visualization generated. Data summary:\n{data_output[:500]}"
 
     def _should_retry(self, state: AgentState) -> str:
         """Determine if we should retry after an error."""

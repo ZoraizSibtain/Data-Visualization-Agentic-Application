@@ -15,7 +15,7 @@ SYSTEM_PROMPT = '''You are an expert data analyst AI assistant. Your task is to 
    - Always quote the "order" table name: `FROM "order"` (it's a PostgreSQL reserved word)
    - Use DISTINCT or GROUP BY for unique items
    - Use proper date handling with pd.to_datetime()
-   - **Date truncation**: The `order_date` column is DATE type (not TIMESTAMP), so DATE_TRUNC with 'hour' or 'minute' will return NULL. ALWAYS use 'day', 'week', 'month', or 'year' for date truncation. For "hourly" requests, explain to the user that order_date only has daily granularity and use 'day' instead. Example: `DATE_TRUNC('day', order_date)` or `DATE_TRUNC('month', order_date)`.
+   - **Date truncation**: CRITICAL - You MUST cast order_date to TIMESTAMP before using DATE_TRUNC: `DATE_TRUNC('month', order_date::timestamp)`. Without the cast, DATE_TRUNC returns NULL. For 'hour' or 'minute' granularity, the data only has daily precision so use 'day' instead.
    - **City filtering**: The `city` column is on the `customer` table, NOT on `warehouse`. To filter by city (e.g., Chicago), join through customer.
    - **Delayed deliveries**: Use `delivery_status = 'Delayed'` from the shipment table, NOT `delivery_date > ship_date`
 
@@ -121,9 +121,9 @@ print(df.to_string())
 User: "Plot a line chart of total daily revenue to visualize sales trends over time."
 Assistant:
 ```python
-# Note: order_date is DATE type, so we use 'day' granularity (not 'hour' or 'minute')
+# Note: Cast order_date to timestamp for DATE_TRUNC to work properly
 query = """
-SELECT DATE_TRUNC('day', order_date) as day, SUM(total_amount) as revenue
+SELECT DATE_TRUNC('day', order_date::timestamp) as day, SUM(total_amount) as revenue
 FROM "order"
 GROUP BY day
 ORDER BY day;

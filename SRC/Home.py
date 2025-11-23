@@ -94,7 +94,8 @@ with st.sidebar:
     st.caption("Current Session: Default")
     if st.button("New Session", use_container_width=True):
         st.session_state.messages = []
-        st.rerun()
+        st.session_state.current_session_id = None  # Will create new session in Chat
+        st.switch_page("pages/1_💬_Chat.py")
 
     st.markdown("---")
 
@@ -123,6 +124,17 @@ with st.sidebar:
         if api_key:
             st.session_state.api_key = api_key
             st.success("API key saved!")
+
+    with st.expander("🧹 Clear Cache", expanded=False):
+        st.caption("Clear cached queries and temp files")
+        if st.button("Clear All Cache", use_container_width=True, key="home_clear_cache"):
+            # Clear workflow cache if exists
+            if 'workflow' in st.session_state and st.session_state.workflow:
+                st.session_state.workflow._cache = {}
+            # Clear Streamlit cache
+            st.cache_data.clear()
+            st.success("Cache cleared!")
+            st.rerun()
 
 # Main Content
 # Header

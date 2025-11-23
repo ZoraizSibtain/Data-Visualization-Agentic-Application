@@ -162,7 +162,11 @@ else:
                 col_a, col_b = st.columns(2)
                 with col_a:
                     if st.button("👁️ View", key=f"view_{query_idx}", use_container_width=True):
+                        # Clear all other expanded states first
+                        for j in range(len(queries)):
+                            st.session_state[f"expanded_{j}"] = False
                         st.session_state[f"expanded_{query_idx}"] = True
+                        st.rerun()
                 with col_b:
                     if st.button("🗑️", key=f"del_{query_idx}", use_container_width=True):
                         query_storage.delete_query(query['id'])

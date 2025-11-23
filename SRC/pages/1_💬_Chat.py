@@ -69,42 +69,78 @@ with st.sidebar:
         # List sessions
         sessions = st.session_state.query_storage.get_sessions()
         for session in sessions:
-            col1, col2, col3 = st.columns([3, 1, 1])
-            with col1:
-                if st.button(session['name'][:20], key=f"session_{session['id']}", use_container_width=True):
-                    st.session_state.current_session_id = session['id']
-                    queries = st.session_state.query_storage.get_session_queries(session['id'])
-                    st.session_state.messages = []
-                    for q in queries:
-                        st.session_state.messages.append({"role": "user", "content": q['user_question']})
-                        st.session_state.messages.append({
-                            "role": "assistant",
-                            "content": q['result_text'] or "Response generated",
-                            "query_id": q['id'],
-                            "sql_query": q['sql_query'],
-                            "python_code": q['python_code'],
-                            "figure_json": q['figure_json'],
-                            "execution_time": q['execution_time'],
-                            "feedback": q['feedback']
-                        })
-                    st.rerun()
-            with col2:
-                if st.button("✏️", key=f"rename_{session['id']}"):
-                    st.session_state[f"renaming_{session['id']}"] = True
-            with col3:
-                if st.button("🗑️", key=f"delete_{session['id']}"):
-                    st.session_state.query_storage.delete_session(session['id'])
-                    if st.session_state.current_session_id == session['id']:
-                        st.session_state.current_session_id = None
-                        st.session_state.messages = []
-                    st.rerun()
-
+            # Check if we're in rename mode for this session
             if st.session_state.get(f"renaming_{session['id']}", False):
-                new_name = st.text_input("New name", value=session['name'], key=f"new_name_{session['id']}")
-                if st.button("Save", key=f"save_name_{session['id']}"):
-                    st.session_state.query_storage.rename_session(session['id'], new_name)
-                    st.session_state[f"renaming_{session['id']}"] = False
-                    st.rerun()
+                # Inline text input for renaming - pressing Enter saves
+                new_name = st.text_input(
+                    "Rename session",
+                    value=session['name'],
+                    key=f"new_name_{session['id']}",
+                    label_visibility="collapsed",
+                    on_change=lambda sid=session['id']: (
+                        st.session_state.query_storage.rename_session(
+                            sid,
+                            st.session_state.get(f"new_name_{sid}", session['name'])
+                        ),
+                        st.session_state.__setitem__(f"renaming_{sid}", False)
+                    )
+                )
+                # Also allow clicking away to cancel
+                col1, col2 = st.columns([1, 1])
+                with col1:
+                    if st.button("✓", key=f"save_{session['id']}", use_container_width=True):
+                        st.session_state.query_storage.rename_session(session['id'], new_name)
+                        st.session_state[f"renaming_{session['id']}"] = False
+                        st.rerun()
+                with col2:
+                    if st.button("✕", key=f"cancel_{session['id']}", use_container_width=True):
+                        st.session_state[f"renaming_{session['id']}"] = False
+                        st.rerun()
+            else:
+                col1, col2, col3 = st.columns([3, 1, 1])
+                with col1:
+                    # Double-click simulation: click to select, click again to rename
+                    btn_key = f"session_{session['id']}"
+                    if st.button(session['name'][:20], key=btn_key, use_container_width=True):
+                        # Check if this was a recent click (double-click detection)
+                        import time
+                        last_click = st.session_state.get(f"last_click_{session['id']}", 0)
+                        current_time = time.time()
+
+                        if current_time - last_click < 0.5 and st.session_state.current_session_id == session['id']:
+                            # Double-click: enter rename mode
+                            st.session_state[f"renaming_{session['id']}"] = True
+                            st.rerun()
+                        else:
+                            # Single click: select session
+                            st.session_state[f"last_click_{session['id']}"] = current_time
+                            st.session_state.current_session_id = session['id']
+                            queries = st.session_state.query_storage.get_session_queries(session['id'])
+                            st.session_state.messages = []
+                            for q in queries:
+                                st.session_state.messages.append({"role": "user", "content": q['user_question']})
+                                st.session_state.messages.append({
+                                    "role": "assistant",
+                                    "content": q['result_text'] or "Response generated",
+                                    "query_id": q['id'],
+                                    "sql_query": q['sql_query'],
+                                    "python_code": q['python_code'],
+                                    "figure_json": q['figure_json'],
+                                    "execution_time": q['execution_time'],
+                                    "feedback": q['feedback']
+                                })
+                            st.rerun()
+                with col2:
+                    if st.button("✏️", key=f"rename_{session['id']}"):
+                        st.session_state[f"renaming_{session['id']}"] = True
+                        st.rerun()
+                with col3:
+                    if st.button("🗑️", key=f"delete_{session['id']}"):
+                        st.session_state.query_storage.delete_session(session['id'])
+                        if st.session_state.current_session_id == session['id']:
+                            st.session_state.current_session_id = None
+                            st.session_state.messages = []
+                        st.rerun()
 
         if not sessions:
             session_id = st.session_state.query_storage.create_session()
@@ -169,6 +205,17 @@ with st.sidebar:
         if api_key:
             st.session_state.api_key = api_key
             st.success("API key set!")
+
+    with st.expander("🧹 Clear Cache", expanded=False):
+        st.caption("Clear cached queries and temp files")
+        if st.button("Clear All Cache", use_container_width=True, key="chat_clear_cache"):
+            # Clear workflow cache
+            if st.session_state.workflow:
+                st.session_state.workflow._cache = {}
+            # Clear Streamlit cache
+            st.cache_data.clear()
+            st.success("Cache cleared!")
+            st.rerun()
 
 # Main chat area
 if not st.session_state.api_key:

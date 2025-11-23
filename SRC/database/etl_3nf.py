@@ -249,10 +249,10 @@ class ETLPipeline:
             })
         )
 
-        # Date conversion
+        # Date conversion - CSV format is M/D/YYYY H:MM
         if 'order_date' in orders.columns:
             orders = orders.with_columns(
-                pl.col('order_date').str.strptime(pl.Datetime, "%Y-%m-%d", strict=False)
+                pl.col('order_date').str.strptime(pl.Datetime, "%m/%d/%Y %H:%M", strict=False)
             )
 
         orders = (
@@ -328,11 +328,11 @@ class ETLPipeline:
             })
         )
 
-        # Date conversion
+        # Date conversion - CSV format is M/D/YYYY H:MM
         for col in ['ship_date', 'delivery_date']:
             if col in shipments.columns:
                 shipments = shipments.with_columns(
-                    pl.col(col).str.strptime(pl.Datetime, "%Y-%m-%d", strict=False)
+                    pl.col(col).str.strptime(pl.Datetime, "%m/%d/%Y %H:%M", strict=False)
                 )
 
         shipments = (
@@ -368,9 +368,10 @@ class ETLPipeline:
             })
         )
 
+        # Date conversion - CSV format is M/D/YYYY H:MM
         if 'review_date' in reviews.columns:
             reviews = reviews.with_columns(
-                pl.col('review_date').str.strptime(pl.Datetime, "%Y-%m-%d", strict=False)
+                pl.col('review_date').str.strptime(pl.Datetime, "%m/%d/%Y %H:%M", strict=False)
             )
 
         reviews = (
