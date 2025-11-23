@@ -11,6 +11,7 @@ from database.csv_ingestion import ingest_csv
 from database.etl_3nf import ETLPipeline
 from agents.workflow_manager import WorkflowManager
 from config import DATABASE_URL
+from utils.sidebar import render_sidebar
 
 # Load API key from environment
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY", "")
@@ -39,21 +40,15 @@ if 'query_storage' not in st.session_state:
 if 'api_key' not in st.session_state:
     st.session_state.api_key = OPENAI_API_KEY if OPENAI_API_KEY else None
 
-# Sidebar
+# Render shared sidebar navigation
+render_sidebar()
+
+# Sidebar - Chat specific controls
 with st.sidebar:
-    st.header("Configuration")
+    # Chat Sessions Section
+    st.markdown('<div style="font-weight: bold; color: #ccc; margin-bottom: 0.5rem; text-transform: uppercase; font-size: 0.8rem;">Chat Sessions</div>', unsafe_allow_html=True)
 
-    # API Key
-    api_key = st.text_input("OpenAI API Key", type="password", value=st.session_state.api_key or "")
-    if api_key:
-        st.session_state.api_key = api_key
-
-    st.markdown("---")
-
-    # Database status
-    st.subheader("Database")
-
-    # Initialize database manager
+    # Initialize database manager first for sessions
     if st.session_state.db_manager is None:
         try:
             st.session_state.db_manager = DatabaseManager(DATABASE_URL)
@@ -62,57 +57,6 @@ with st.sidebar:
                 st.session_state.query_storage = QueryStorage(DATABASE_URL)
         except Exception as e:
             st.error(f"Database error: {e}")
-
-    if st.session_state.database_initialized:
-        st.success("Connected")
-        tables = st.session_state.db_manager.get_table_names()
-        st.caption(f"{len(tables)} tables available")
-    else:
-        st.warning("Not connected")
-
-    # CSV Upload
-    st.markdown("---")
-    st.subheader("Upload Data")
-
-    uploaded_file = st.file_uploader("Upload CSV", type=['csv'])
-    if uploaded_file:
-        if st.button("Load CSV"):
-            with st.spinner("Loading data..."):
-                # Save uploaded file temporarily
-                temp_path = f"/tmp/{uploaded_file.name}"
-                with open(temp_path, 'wb') as f:
-                    f.write(uploaded_file.getvalue())
-
-                try:
-                    # Use ETL pipeline for structured data
-                    etl = ETLPipeline(DATABASE_URL)
-                    etl.drop_tables()
-                    etl.create_tables()
-                    etl.transform_and_load(temp_path)
-                    etl.close()
-
-                    st.session_state.database_initialized = True
-                    st.success("Data loaded!")
-                    st.rerun()
-                except Exception as e:
-                    # Fallback to simple ingestion
-                    try:
-                        table_name = ingest_csv(temp_path, database_url=DATABASE_URL)
-                        st.success(f"Loaded as table: {table_name}")
-                        st.rerun()
-                    except Exception as e2:
-                        st.error(f"Error: {e2}")
-
-    # View schema
-    if st.session_state.database_initialized:
-        with st.expander("View Database Schema"):
-            schema = st.session_state.db_manager.get_schema()
-            st.code(schema, language='text')
-
-    st.markdown("---")
-
-    # Session management
-    st.subheader("Chat Sessions")
 
     if st.session_state.query_storage:
         # Create new session button
@@ -129,7 +73,6 @@ with st.sidebar:
             with col1:
                 if st.button(session['name'][:20], key=f"session_{session['id']}", use_container_width=True):
                     st.session_state.current_session_id = session['id']
-                    # Load session messages
                     queries = st.session_state.query_storage.get_session_queries(session['id'])
                     st.session_state.messages = []
                     for q in queries:
@@ -156,7 +99,6 @@ with st.sidebar:
                         st.session_state.messages = []
                     st.rerun()
 
-            # Rename input
             if st.session_state.get(f"renaming_{session['id']}", False):
                 new_name = st.text_input("New name", value=session['name'], key=f"new_name_{session['id']}")
                 if st.button("Save", key=f"save_name_{session['id']}"):
@@ -164,13 +106,69 @@ with st.sidebar:
                     st.session_state[f"renaming_{session['id']}"] = False
                     st.rerun()
 
-        # Create initial session if none exists
         if not sessions:
             session_id = st.session_state.query_storage.create_session()
             st.session_state.current_session_id = session_id
             st.rerun()
         elif st.session_state.current_session_id is None:
             st.session_state.current_session_id = sessions[0]['id']
+
+    st.markdown("---")
+
+    # Database Status Section (Dropdown)
+    st.markdown('<div style="font-weight: bold; color: #ccc; margin-bottom: 0.5rem; text-transform: uppercase; font-size: 0.8rem;">Database</div>', unsafe_allow_html=True)
+
+    # Database status dropdown
+    if st.session_state.database_initialized:
+        db_status = "Connected"
+        status_color = "green"
+        tables = st.session_state.db_manager.get_table_names()
+    else:
+        db_status = "Disconnected"
+        status_color = "red"
+        tables = []
+
+    with st.expander(f"⚡ Status: :{status_color}[{db_status}]", expanded=False):
+        st.write(f"**Current DB**: PostgreSQL")
+        if tables:
+            st.caption(f"{len(tables)} tables available")
+        if st.session_state.database_initialized:
+            with st.container():
+                schema = st.session_state.db_manager.get_schema()
+                st.code(schema, language='text')
+
+    with st.expander("📂 Upload Data", expanded=False):
+        uploaded_file = st.file_uploader("Upload CSV", type=['csv'])
+        if uploaded_file:
+            if st.button("Load CSV"):
+                with st.spinner("Loading data..."):
+                    temp_path = f"/tmp/{uploaded_file.name}"
+                    with open(temp_path, 'wb') as f:
+                        f.write(uploaded_file.getvalue())
+
+                    try:
+                        etl = ETLPipeline(DATABASE_URL)
+                        etl.drop_tables()
+                        etl.create_tables()
+                        etl.transform_and_load(temp_path)
+                        etl.close()
+
+                        st.session_state.database_initialized = True
+                        st.success("Data loaded!")
+                        st.rerun()
+                    except Exception as e:
+                        try:
+                            table_name = ingest_csv(temp_path, database_url=DATABASE_URL)
+                            st.success(f"Loaded as table: {table_name}")
+                            st.rerun()
+                        except Exception as e2:
+                            st.error(f"Error: {e2}")
+
+    with st.expander("⚙️ API Configuration", expanded=False):
+        api_key = st.text_input("OpenAI API Key", type="password", value=st.session_state.api_key or "")
+        if api_key:
+            st.session_state.api_key = api_key
+            st.success("API key set!")
 
 # Main chat area
 if not st.session_state.api_key:
@@ -181,6 +179,45 @@ else:
     # Initialize workflow
     if st.session_state.workflow is None and st.session_state.api_key:
         st.session_state.workflow = WorkflowManager(st.session_state.api_key, DATABASE_URL)
+
+    # Check for selected query from Home page
+    if 'selected_query' in st.session_state and st.session_state.selected_query:
+        query_to_run = st.session_state.selected_query
+        st.session_state.selected_query = None  # Clear it
+        
+        # Add to messages
+        st.session_state.messages.append({"role": "user", "content": query_to_run})
+        
+        # Run immediately
+        with st.spinner(f"Running sample query: {query_to_run}..."):
+            # Get schema
+            schema = st.session_state.db_manager.get_schema()
+            # Run workflow
+            result = st.session_state.workflow.run(query_to_run, schema)
+            
+            # Save to database
+            query_id = st.session_state.query_storage.save_query(
+                session_id=st.session_state.current_session_id,
+                user_question=query_to_run,
+                sql_query=result.get("sql_query"),
+                python_code=result.get("python_code"),
+                result_text=result["response"],
+                figure_json=result.get("figure_json"),
+                execution_time=result.get("execution_time")
+            )
+            
+            # Add to messages
+            st.session_state.messages.append({
+                "role": "assistant",
+                "content": result["response"],
+                "query_id": query_id,
+                "sql_query": result.get("sql_query"),
+                "python_code": result.get("python_code"),
+                "figure_json": result.get("figure_json"),
+                "execution_time": result.get("execution_time"),
+                "feedback": "none"
+            })
+            st.rerun()
 
     # Display chat history
     for i, message in enumerate(st.session_state.messages):

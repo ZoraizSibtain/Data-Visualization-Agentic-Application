@@ -5,6 +5,7 @@ import os
 sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 from database.query_storage import QueryStorage
 from config import DATABASE_URL
+from utils.sidebar import render_sidebar
 
 # Page config
 st.set_page_config(
@@ -14,7 +15,7 @@ st.set_page_config(
     initial_sidebar_state="expanded"
 )
 
-# Custom CSS for dark theme
+# Custom CSS for dark theme and new components
 st.markdown("""
 <style>
     .main-header {
@@ -67,20 +68,63 @@ st.markdown("""
         margin-right: 10px;
         font-weight: bold;
     }
-    .query-template {
-        background: #1e1e2e;
-        border-radius: 8px;
-        padding: 1rem;
-        margin: 0.5rem 0;
-        border-left: 3px solid #667eea;
-        cursor: pointer;
+    /* Sidebar styling */
+    .sidebar-section {
+        margin-bottom: 1rem;
+        padding-bottom: 1rem;
+        border-bottom: 1px solid #3d3d5c;
     }
-    .query-template:hover {
-        background: #2d2d44;
+    .sidebar-header {
+        font-weight: bold;
+        color: #ccc;
+        margin-bottom: 0.5rem;
+        text-transform: uppercase;
+        font-size: 0.8rem;
     }
 </style>
 """, unsafe_allow_html=True)
 
+# Render shared sidebar navigation
+render_sidebar()
+
+# Sidebar - Home specific controls
+with st.sidebar:
+    # Chat Sessions Section
+    st.markdown('<div class="sidebar-header">Chat Sessions</div>', unsafe_allow_html=True)
+    st.caption("Current Session: Default")
+    if st.button("New Session", use_container_width=True):
+        st.session_state.messages = []
+        st.rerun()
+
+    st.markdown("---")
+
+    # Database Status Section (Dropdown)
+    st.markdown('<div class="sidebar-header">Database</div>', unsafe_allow_html=True)
+
+    # Check connection status
+    try:
+        db_status = "Connected" if os.path.exists("database/query_storage.py") else "Disconnected"
+        status_color = "green" if db_status == "Connected" else "red"
+    except:
+        db_status = "Disconnected"
+        status_color = "red"
+
+    with st.expander(f"⚡ Status: :{status_color}[{db_status}]", expanded=False):
+        st.write(f"**Current DB**: PostgreSQL")
+        st.caption("Database connection is active")
+
+    with st.expander("📂 Upload Data", expanded=False):
+        uploaded_file = st.file_uploader("Upload CSV", type=['csv'], key="home_upload")
+        if uploaded_file:
+            st.info("Go to Chat page to load this file")
+
+    with st.expander("⚙️ API Configuration", expanded=False):
+        api_key = st.text_input("OpenAI API Key", type="password", key="home_api_key")
+        if api_key:
+            st.session_state.api_key = api_key
+            st.success("API key saved!")
+
+# Main Content
 # Header
 st.markdown('<h1 class="main-header">Agentic Data Analysis</h1>', unsafe_allow_html=True)
 st.markdown('<p class="sub-header">AI-powered data analysis with natural language queries</p>', unsafe_allow_html=True)
@@ -173,39 +217,37 @@ st.markdown("---")
 # Sample queries
 st.markdown("### Sample Queries")
 
+def set_query_and_switch(query):
+    st.session_state['selected_query'] = query
+    st.switch_page("pages/1_💬_Chat.py")
+
 tab1, tab2 = st.tabs(["📊 Visualization Queries", "📋 Tabular Queries"])
 
 with tab1:
-    st.markdown("""
-    <div class="query-template">
-        Plot a line chart of total monthly revenue
-    </div>
-    <div class="query-template">
-        What is the percentage distribution of delivery statuses?
-    </div>
-    <div class="query-template">
-        Plot the average review rating per manufacturer
-    </div>
-    <div class="query-template">
-        Compare average shipping cost by carrier
-    </div>
-    """, unsafe_allow_html=True)
+    c1, c2 = st.columns(2)
+    with c1:
+        if st.button("📈 Plot a line chart of total monthly revenue", use_container_width=True):
+            set_query_and_switch("Plot a line chart of total monthly revenue to visualize sales trends over time")
+        if st.button("🥧 Delivery status distribution", use_container_width=True):
+            set_query_and_switch("What is the percentage distribution of delivery statuses across all orders?")
+    with c2:
+        if st.button("📊 Average review rating per manufacturer", use_container_width=True):
+            set_query_and_switch("Plot the average review rating per manufacturer")
+        if st.button("🚚 Compare shipping cost by carrier", use_container_width=True):
+            set_query_and_switch("Compare average shipping cost by carrier")
 
 with tab2:
-    st.markdown("""
-    <div class="query-template">
-        Which robot vacuum models have the most delayed deliveries in Chicago?
-    </div>
-    <div class="query-template">
-        Which warehouses are currently below their restock threshold?
-    </div>
-    <div class="query-template">
-        What are the top 10 products by total revenue?
-    </div>
-    <div class="query-template">
-        List customers with the most orders
-    </div>
-    """, unsafe_allow_html=True)
+    c1, c2 = st.columns(2)
+    with c1:
+        if st.button("🐢 Delayed deliveries in Chicago", use_container_width=True):
+            set_query_and_switch("Which robot vacuum models have the highest number of delayed deliveries across all Chicago ZIP codes?")
+        if st.button("📉 Warehouses below restock threshold", use_container_width=True):
+            set_query_and_switch("Which warehouses are currently below their restock threshold based on stock level and capacity?")
+    with c2:
+        if st.button("💰 Top 10 products by revenue", use_container_width=True):
+            set_query_and_switch("What are the top 10 products by total revenue?")
+        if st.button("👤 Customers with most orders", use_container_width=True):
+            set_query_and_switch("List customers with the most orders")
 
 st.markdown("---")
 

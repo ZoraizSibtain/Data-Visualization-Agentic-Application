@@ -2,12 +2,13 @@ from reportlab.lib import colors
 from reportlab.lib.pagesizes import letter
 from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
 from reportlab.lib.units import inch
-from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle, PageBreak
+from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle, PageBreak, Image
 from reportlab.platypus.flowables import HRFlowable
 from datetime import datetime
 from io import BytesIO
 from typing import List
-
+import plotly.io as pio
+import json
 
 def generate_pdf_report(queries: List[dict], title: str = "Query Report") -> bytes:
     """
@@ -132,6 +133,25 @@ def generate_pdf_report(queries: List[dict], title: str = "Query Report") -> byt
             result_escaped = str(result)[:500].replace('&', '&amp;').replace('<', '&lt;').replace('>', '&gt;')
             elements.append(Paragraph(result_escaped, normal_style))
 
+        # Visualization
+        figure_json = query.get('figure_json')
+        if figure_json:
+            try:
+                fig = pio.from_json(figure_json)
+                # Convert to image bytes using kaleido engine
+                img_bytes = pio.to_image(fig, format='png', width=600, height=400, scale=2, engine='kaleido')
+                if img_bytes:
+                    img_buffer = BytesIO(img_bytes)
+                    img = Image(img_buffer, width=5.5*inch, height=3.5*inch)
+                    elements.append(Spacer(1, 10))
+                    elements.append(Paragraph("<b>Visualization:</b>", normal_style))
+                    elements.append(img)
+                    elements.append(Spacer(1, 10))
+            except ImportError:
+                elements.append(Paragraph("<i>(Install 'kaleido' package to include charts in PDF: pip install kaleido)</i>", normal_style))
+            except Exception as e:
+                elements.append(Paragraph(f"<i>(Error generating chart image: {str(e)})</i>", normal_style))
+
         # Notes
         notes = query.get('notes', '')
         if notes:
@@ -145,8 +165,8 @@ def generate_pdf_report(queries: List[dict], title: str = "Query Report") -> byt
 
         elements.append(Spacer(1, 20))
 
-        # Page break after every 3 queries
-        if i % 3 == 0 and i < len(queries):
+        # Page break after every 2 queries (reduced from 3 to accommodate images)
+        if i % 2 == 0 and i < len(queries):
             elements.append(PageBreak())
 
     # Build PDF

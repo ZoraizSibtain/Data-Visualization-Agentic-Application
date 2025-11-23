@@ -7,12 +7,16 @@ sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from database.query_storage import QueryStorage
 from utils.pdf_generator import generate_pdf_report
 from config import DATABASE_URL
+from utils.sidebar import render_sidebar
 
 st.set_page_config(
     page_title="Saved Queries - Agentic Data Analysis",
     page_icon="💾",
     layout="wide"
 )
+
+# Render shared sidebar
+render_sidebar()
 
 st.title("💾 Saved Queries")
 

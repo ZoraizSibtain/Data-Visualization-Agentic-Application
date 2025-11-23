@@ -8,12 +8,16 @@ import os
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from database.query_storage import QueryStorage
 from config import DATABASE_URL
+from utils.sidebar import render_sidebar
 
 st.set_page_config(
     page_title="Performance Metrics - Agentic Data Analysis",
     page_icon="📊",
     layout="wide"
 )
+
+# Render shared sidebar
+render_sidebar()
 
 st.title("📊 Performance Metrics")
 

@@ -1,204 +1,179 @@
-# 📊 Agentic Data Analysis Application
-Version 3.0
+# Agentic Data Analysis
 
-An intelligent data analysis application powered by LangChain agents and Streamlit. Upload CSV files and ask questions in natural language to get instant visualizations and insights.
+An AI-powered data analysis platform that transforms natural language questions into SQL queries, automated visualizations, and comprehensive reports.
 
-## ✨ Features & Functions
+## Features
 
-### 🧠 Intelligent Analysis
-- **Natural Language Processing**: Ask complex questions in plain English (e.g., "Show me sales trends for the last quarter").
-- **Multi-Agent Orchestration**: A coordinated system of AI agents handles SQL generation, Python code execution, and data visualization.
-- **Context Awareness**: The system remembers previous interactions within a session for seamless follow-up questions.
+### Core Capabilities
+- **Natural Language to SQL** - Ask questions in plain English; the AI generates optimized SQL queries
+- **Auto-Visualization** - Automatic Plotly chart generation with vibrant color schemes
+- **Smart Query Memory** - Save, organize, and revisit your analysis sessions
+- **PDF Report Generation** - Export queries with visualizations to shareable PDF reports
 
-### 📊 Advanced Visualization
-- **Auto-Plotting**: Automatically selects the most suitable chart type (Bar, Line, Scatter, Pie, Heatmap, etc.) based on the data.
-- **Interactive Charts**: Fully interactive Plotly visualizations with zoom, pan, and hover details.
-- **Customization**: Charts are styled with a premium, dark-mode aesthetic.
+### User Interface
+- **Organized Sidebar** - Clean navigation with collapsible database controls
+- **Chat Sessions** - Multiple conversation threads with full history
+- **Query History** - Visual card-based grid view (4-column layout) with filtering
+- **One-Click Sample Queries** - Pre-built examples that run immediately in chat
 
-### 💾 Data & Session Management
-- **Dynamic CSV Ingestion**: Upload any CSV file; the system automatically detects schemas and data types.
-- **Saved Queries**: Bookmark important insights and access them later in a dedicated dashboard.
-- **History Tracking**: Review past analysis sessions and search through your query history.
-- **PDF Reporting**: Generate professional PDF reports including your charts and insights.
-
-### 🛠️ Technical Capabilities
-- **Secure Execution**: Python code runs in a sandboxed environment.
-- **Error Recovery**: Self-correcting agents that can fix SQL syntax errors or code bugs automatically.
-- **Performance Monitoring**: Track query execution times and user satisfaction metrics.
-
-## 🚀 Quick Start
+## Quick Start
 
 ### Prerequisites
-
-- Python 3.8+
-- OpenAI API Key
+- Python 3.12+
+- PostgreSQL database
+- OpenAI API key
 
 ### Installation
 
-1. **Clone or navigate to the project directory**
-   ```bash
-   cd /Users/zibtain/Downloads/HW/SRC
-   ```
+1. **Clone and install dependencies**
+```bash
+cd SRC
+pip install -r requirements.txt
+```
 
-2. **Install dependencies**
-   ```bash
-   pip install -r requirements.txt
-   ```
+2. **Configure environment**
+```bash
+cp .env.example .env
+```
 
-3. **Configure API Key (Optional)**
-   
-   Create a `.env` file:
-   ```bash
-   cp .env.example .env
-   ```
-   
-   Edit `.env` and add your OpenAI API key:
-   ```
-   OPENAI_API_KEY=your_api_key_here
-   ```
-   
-   *Note: You can also enter the API key directly in the app's sidebar*
+Edit `.env` with your credentials:
+```env
+DATABASE_URL=postgresql://user:password@localhost:5432/robot_vacuum_depot
+OPENAI_API_KEY=your-api-key-here
+```
+
+3. **Setup PostgreSQL database**
+```bash
+# Create database
+createdb robot_vacuum_depot
+
+# Initialize schema and load sample data
+python setup_database.py
+```
+
+To reset with fresh data:
+```bash
+python setup_database.py --reset
+```
 
 4. **Run the application**
-   ```bash
-   streamlit run app.py
-   ```
+```bash
+streamlit run Home.py
+```
 
-5. **Open your browser**
-   
-   The app will automatically open at `http://localhost:8501`
+The app will open at `http://localhost:8501`
 
-## 📖 Usage
+## Usage Guide
 
-### First Time Setup
+### Getting Started
+1. Enter your OpenAI API key in the sidebar (Database > API Configuration)
+2. Upload a CSV file or use the pre-loaded sample dataset
+3. Start asking questions in the Chat interface
 
-1. Click **"Initialize Default Database"** in the sidebar to load the sample RobotVacuum dataset
-2. Enter your OpenAI API key in the sidebar (or set it in `.env`)
+### Sample Queries
 
-### Analyzing Data
+**Visualization Queries:**
+- "Plot a line chart of total monthly revenue"
+- "What is the percentage distribution of delivery statuses?"
+- "Compare average shipping cost by carrier"
+- "Plot the average review rating per manufacturer"
 
-Ask questions in natural language:
-- "Show me the top 10 products by sales"
-- "What's the trend of revenue over time?"
-- "Compare sales across different categories"
-- "Show the distribution of product prices"
+**Data Analysis Queries:**
+- "Which robot vacuum models have the most delayed deliveries in Chicago?"
+- "Which warehouses are below their restock threshold?"
+- "What are the top 10 products by total revenue?"
+- "List customers with the most orders"
 
-The AI will automatically:
-1. Generate appropriate SQL queries
-2. Execute them against your database
-3. Create beautiful, interactive visualizations
+### Working with Results
+- **Save Queries** - Click the save button on any response
+- **Export PDF** - Generate reports from saved queries
+- **View History** - Browse past queries in a visual card grid
+- **Provide Feedback** - Rate responses with thumbs up/down
 
-### Uploading Custom Data
-
-1. Click **"Upload CSV"** in the sidebar
-2. Select your CSV file
-3. Click **"Process CSV"**
-4. Start asking questions about your data!
-
-## 🏗️ Architecture
+## Project Structure
 
 ```
 SRC/
-├── app.py                      # Main Streamlit application
-├── config.py                   # Configuration settings
-├── requirements.txt            # Dependencies
+├── Home.py                    # Landing page with navigation
+├── config.py                  # Configuration and environment variables
+├── setup_database.py          # Database initialization script
+├── pages/
+│   ├── 1_💬_Chat.py          # Main chat interface
+│   ├── 2_📜_History.py       # Query history with card grid
+│   ├── 3_💾_Saved_Queries.py # Saved queries and PDF export
+│   └── 4_📊_Performance_Metrics.py
 ├── database/
-│   ├── DatabaseManager.py      # Dynamic schema inspection
-│   ├── csv_ingestion.py        # CSV upload handler
-│   └── database_setup.py       # Default data setup
+│   ├── DatabaseManager.py     # Database connection handling
+│   ├── query_storage.py       # Query persistence
+│   ├── csv_ingestion.py       # CSV file loading
+│   ├── etl_3nf.py            # ETL pipeline
+│   └── schema_3nf.py         # Database schema
 ├── agents/
-│   ├── workflow_manager.py     # Multi-agent orchestration
-│   └── python_repl_tool.py     # Safe code execution
+│   ├── workflow_manager.py    # LangGraph workflow
+│   └── python_repl_tool.py   # Safe code execution
 ├── utils/
-│   └── prompts.py              # LLM prompts
-└── data/
-    ├── robot_vacuum.db         # SQLite database
-    └── RobotVacuumDepot_MasterData.csv
+│   ├── prompts.py            # LLM prompts and examples
+│   ├── pdf_generator.py      # PDF report generation
+│   ├── sql_extractor.py      # SQL parsing utilities
+│   └── sql_validator.py      # Security validation
+└── data/                      # Sample datasets
 ```
 
-## 🎯 Key Components
+## Tech Stack
 
-### DatabaseManager
-- Dynamic schema inspection using SQLAlchemy
-- Supports any CSV structure
-- Automatic type inference
+- **Frontend**: Streamlit
+- **Backend**: Python 3.12+
+- **Database**: PostgreSQL with SQLAlchemy
+- **AI/ML**: OpenAI GPT-4o-mini, LangChain, LangGraph
+- **Visualization**: Plotly with custom color palettes
+- **PDF Generation**: ReportLab with Kaleido for chart images
 
-### WorkflowManager
-- Multi-agent orchestration
-- Code generation and execution
-- Error recovery with retries
+## Configuration
 
-### PythonREPL Tool
-- Safe Python code execution
-- Pre-configured with pandas, plotly, SQLAlchemy
-- Database connection injection
+### Environment Variables
 
-## 🎨 Visualization Types
+| Variable | Description | Required |
+|----------|-------------|----------|
+| `DATABASE_URL` | PostgreSQL connection string | Yes |
+| `OPENAI_API_KEY` | OpenAI API key | Yes |
 
-The AI automatically selects the best visualization:
-- **Bar Charts**: Comparisons and rankings
-- **Line Charts**: Trends over time
-- **Scatter Plots**: Relationships between variables
-- **Pie Charts**: Proportions and percentages
-- **Histograms**: Distributions
-- **Box Plots**: Statistical distributions
-- **Heatmaps**: Correlations
+### Optional: PDF Charts
 
-## 🔧 Configuration
+To include visualizations in PDF reports, install Kaleido:
+```bash
+pip install kaleido
+```
 
-Edit `config.py` to customize:
-- Database paths
-- LLM model (default: gpt-4o-mini)
-- Temperature settings
-- Max iterations for error recovery
+## Development
 
-## 🛡️ Security Notes
+### Adding New Features
 
-- API keys are never logged or stored
-- Python code execution is sandboxed
-- SQL queries are generated by AI (review in UI)
+1. **New Pages** - Add to `pages/` directory with numbered prefix
+2. **Custom Prompts** - Modify `utils/prompts.py`
+3. **Database Schema** - Update `database/schema_3nf.py`
 
-## 📝 Example Questions
+### Code Style
+- Follow PEP 8 guidelines
+- Use type hints where applicable
+- Keep functions focused and documented
 
-**Sales Analysis:**
-- "What are the top 5 best-selling products?"
-- "Show monthly sales trends"
-- "Compare revenue by category"
+## Troubleshooting
 
-**Statistical Analysis:**
-- "What's the average price by brand?"
-- "Show the distribution of ratings"
-- "Find outliers in the sales data"
+### Common Issues
 
-**Comparative Analysis:**
-- "Compare performance across regions"
-- "Show year-over-year growth"
-- "Which category has the highest margin?"
+**Database Connection Error**
+- Verify PostgreSQL is running
+- Check DATABASE_URL in `.env`
+- Ensure database exists: `createdb robot_vacuum_depot`
 
-## 🔄 Changelog (vs Legacy Version)
+**Charts Not Appearing in PDF**
+- Install kaleido: `pip install kaleido`
+- Check that figure_json is being saved with queries
 
-This version represents a major architectural overhaul from the previous iteration (`old src`):
+**API Key Issues**
+- Verify OPENAI_API_KEY in `.env` or sidebar input
+- Check API key has sufficient credits
 
-- **Architecture**: Transitioned from a monolithic script to a modular **Streamlit Multipage Application** for better scalability and navigation.
-- **UI/UX**: Implemented a **Premium Design System** with custom CSS, vibrant gradients, and improved layout hierarchy.
-- **Agent System**: Refactored the `agentic_processor` into a streamlined `agents/` directory with clearer separation of concerns (Workflow Manager, Python REPL).
-- **Database**: Enhanced `DatabaseManager` with robust CSV ingestion, automatic type inference, and persistent query storage.
-- **New Features**: Added PDF reporting, saved queries dashboard, and performance metrics tracking.
-
-## 🤝 Contributing
-
-This project follows the architecture specified in the COMPLETE_RECREATE_PROMPT with:
-- Dynamic schema handling (no hardcoded queries)
-- Visualization-first approach
-- LangChain PythonREPLTool integration
-- Multi-agent workflow patterns
-
-## 📄 License
+## License
 
 MIT License
-
-## 🙏 Acknowledgments
-
-- Built with [Streamlit](https://streamlit.io/)
-- Powered by [LangChain](https://langchain.com/)
-- Visualizations by [Plotly](https://plotly.com/)

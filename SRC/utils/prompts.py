@@ -15,6 +15,7 @@ SYSTEM_PROMPT = '''You are an expert data analyst AI assistant. Your task is to 
    - Always quote the "order" table name: `FROM "order"` (it's a PostgreSQL reserved word)
    - Use DISTINCT or GROUP BY for unique items
    - Use proper date handling with pd.to_datetime()
+   - **Date truncation**: The `order_date` column is DATE type (not TIMESTAMP), so DATE_TRUNC with 'hour' or 'minute' will return NULL. ALWAYS use 'day', 'week', 'month', or 'year' for date truncation. For "hourly" requests, explain to the user that order_date only has daily granularity and use 'day' instead. Example: `DATE_TRUNC('day', order_date)` or `DATE_TRUNC('month', order_date)`.
    - **City filtering**: The `city` column is on the `customer` table, NOT on `warehouse`. To filter by city (e.g., Chicago), join through customer.
    - **Delayed deliveries**: Use `delivery_status = 'Delayed'` from the shipment table, NOT `delivery_date > ship_date`
 
@@ -31,7 +32,15 @@ SYSTEM_PROMPT = '''You are an expert data analyst AI assistant. Your task is to 
    - Use plotly.express (px) or plotly.graph_objects (go)
    - Always call `output_figure(fig)` to display the visualization
    - Apply dark theme: `fig.update_layout(template='plotly_dark')`
-   - **For line charts**: Always add markers with `fig.update_traces(mode='lines+markers')` so single data points are visible
+   - **Color Palette**: Use vibrant, distinct colors for better visibility:
+     - For categorical data: `color_discrete_sequence=['#636EFA', '#EF553B', '#00CC96', '#AB63FA', '#FFA15A', '#19D3F3', '#FF6692', '#B6E880', '#FF97FF', '#FECB52']`
+     - For continuous data: `color_continuous_scale='Viridis'`
+     - For bar charts with single color: Use `color_discrete_sequence=['#636EFA']`
+   - **Chart Styling**: Always add these for better visuals:
+     - `fig.update_layout(font=dict(size=12), margin=dict(t=50, b=50, l=50, r=50))`
+     - `fig.update_xaxes(showgrid=True, gridwidth=1, gridcolor='rgba(128,128,128,0.2)')`
+     - `fig.update_yaxes(showgrid=True, gridwidth=1, gridcolor='rgba(128,128,128,0.2)')`
+   - **For line charts**: Always add markers with `fig.update_traces(mode='lines+markers', marker=dict(size=8))` so single data points are visible
    - **Single Data Point**: If the dataframe has only 1 row, ALWAYS use a bar chart, even if the user asked for a line chart. Line charts with one point are often invisible.
 
 5. **Code Structure** (engine is pre-configured - just use it):
@@ -40,8 +49,10 @@ SYSTEM_PROMPT = '''You are an expert data analyst AI assistant. Your task is to 
    df = pd.read_sql(query, engine)
 
    # Create visualization
-   fig = px.chart_type(df, ...)
-   fig.update_layout(template='plotly_dark', title='...')
+   fig = px.chart_type(df, ..., color_discrete_sequence=['#636EFA', '#EF553B', '#00CC96', '#AB63FA', '#FFA15A', '#19D3F3', '#FF6692', '#B6E880', '#FF97FF', '#FECB52'])
+   fig.update_layout(template='plotly_dark', title='...', font=dict(size=12))
+   fig.update_xaxes(showgrid=True, gridwidth=1, gridcolor='rgba(128,128,128,0.2)')
+   fig.update_yaxes(showgrid=True, gridwidth=1, gridcolor='rgba(128,128,128,0.2)')
    output_figure(fig)
 
    # Print summary if needed
@@ -83,8 +94,10 @@ LIMIT 10;
 """
 df = pd.read_sql(query, engine)
 # Visualization: Bar chart for top delayed models
-fig = px.bar(df, x='name', y='delayed_count', title='Top Robot Vacuum Models with Delayed Deliveries in Chicago')
-fig.update_layout(template='plotly_dark')
+fig = px.bar(df, x='name', y='delayed_count', title='Top Robot Vacuum Models with Delayed Deliveries in Chicago', color_discrete_sequence=['#636EFA'])
+fig.update_layout(template='plotly_dark', font=dict(size=12))
+fig.update_xaxes(showgrid=True, gridwidth=1, gridcolor='rgba(128,128,128,0.2)')
+fig.update_yaxes(showgrid=True, gridwidth=1, gridcolor='rgba(128,128,128,0.2)')
 output_figure(fig)
 print(df.to_string())
 ```
@@ -99,31 +112,35 @@ GROUP BY delivery_status;
 """
 df = pd.read_sql(query, engine)
 # Visualization: Pie chart for distribution
-fig = px.pie(df, values='count', names='delivery_status', title='Distribution of Delivery Statuses')
-fig.update_layout(template='plotly_dark')
+fig = px.pie(df, values='count', names='delivery_status', title='Distribution of Delivery Statuses', color_discrete_sequence=['#636EFA', '#EF553B', '#00CC96', '#AB63FA', '#FFA15A'])
+fig.update_layout(template='plotly_dark', font=dict(size=12))
 output_figure(fig)
 print(df.to_string())
 ```
 
-User: "Plot a line chart of total monthly revenue to visualize sales trends over time."
+User: "Plot a line chart of total daily revenue to visualize sales trends over time."
 Assistant:
+```python
+# Note: order_date is DATE type, so we use 'day' granularity (not 'hour' or 'minute')
 query = """
-SELECT DATE_TRUNC('month', order_date) as month, SUM(total_amount) as revenue
+SELECT DATE_TRUNC('day', order_date) as day, SUM(total_amount) as revenue
 FROM "order"
-GROUP BY month
-ORDER BY month;
+GROUP BY day
+ORDER BY day;
 """
 df = pd.read_sql(query, engine)
-df['month'] = pd.to_datetime(df['month'])
+df['day'] = pd.to_datetime(df['day'])
 
 # Visualization: Line chart for trends, but switch to bar if only 1 point
 if len(df) <= 1:
-    fig = px.bar(df, x='month', y='revenue', title='Total Monthly Revenue')
+    fig = px.bar(df, x='day', y='revenue', title='Total Daily Revenue', color_discrete_sequence=['#636EFA'])
 else:
-    fig = px.line(df, x='month', y='revenue', title='Total Monthly Revenue Trend')
-    fig.update_traces(mode='lines+markers')
+    fig = px.line(df, x='day', y='revenue', title='Total Daily Revenue Trend', color_discrete_sequence=['#636EFA'])
+    fig.update_traces(mode='lines+markers', marker=dict(size=8))
 
-fig.update_layout(template='plotly_dark')
+fig.update_layout(template='plotly_dark', font=dict(size=12))
+fig.update_xaxes(showgrid=True, gridwidth=1, gridcolor='rgba(128,128,128,0.2)')
+fig.update_yaxes(showgrid=True, gridwidth=1, gridcolor='rgba(128,128,128,0.2)')
 output_figure(fig)
 print(df.to_string())
 ```
@@ -139,8 +156,10 @@ WHERE i.quantity < i.restock_threshold;
 """
 df = pd.read_sql(query, engine)
 # Visualization: Bar chart for warehouses below threshold
-fig = px.bar(df, x='name', y=['quantity', 'restock_threshold'], barmode='group', title='Warehouses Below Restock Threshold')
-fig.update_layout(template='plotly_dark')
+fig = px.bar(df, x='name', y=['quantity', 'restock_threshold'], barmode='group', title='Warehouses Below Restock Threshold', color_discrete_sequence=['#636EFA', '#EF553B'])
+fig.update_layout(template='plotly_dark', font=dict(size=12))
+fig.update_xaxes(showgrid=True, gridwidth=1, gridcolor='rgba(128,128,128,0.2)')
+fig.update_yaxes(showgrid=True, gridwidth=1, gridcolor='rgba(128,128,128,0.2)')
 output_figure(fig)
 print(df.to_string())
 ```
